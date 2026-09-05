@@ -48,56 +48,9 @@
   </section>
 {% else %}
   <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
-    {% for card in albums %}
-      {% set cover_src = '/media/image/' ~ card.cover_image_id if card.cover_image_id else '/static/images/no-image.png' %}
-      <a href="/album/{{ card.album_id }}" class="group block">
-        <div class="h-full flex flex-col rounded-xl overflow-hidden bg-white border border-transparent transition-all duration-300 ease-out group-hover:shadow-card group-hover:border-gray-200">
-          <div class="aspect-square overflow-hidden bg-gray-100">
-            <img loading="lazy" decoding="async" src="{{ cover_src }}" alt="{{ card.clean_title|e }}"
-                 class="w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105"
-                 onerror="this.onerror=null;this.src='/static/images/no-image.png';">
-          </div>
-          <div class="p-4 pt-3.5 pb-4 flex-1 flex flex-col justify-start">
-            <h3 class="text-[13.5px] leading-snug line-clamp-2 text-black font-medium">
-              {{ card.clean_title|e }}
-            </h3>
-          </div>
-        </div>
-      </a>
-    {% endfor %}
+    {% with albums=albums, page=page, has_next=pagination.has_next, next_url=('/partial/albums?page=' ~ (page + 1) ~ '&category_id=' ~ category.id ~ '&per_page=' ~ per_page) %}
+      {% include "components/album_grid_chunk.html" %}
+    {% endwith %}
   </section>
-
-  {% if total_pages > 1 %}
-    <nav class="mt-12 flex items-center justify-between gap-4" aria-label="Пагинация">
-      <a {% if pagination.has_prev %}href="{{ pagination.prev_url }}"{% else %}aria-disabled="true" tabindex="-1" class="pointer-events-none opacity-40"{% endif %}
-         class="inline-flex items-center h-10 px-5 rounded-full border border-line bg-white text-sm font-semibold hover:border-black transition whitespace-nowrap">
-        ← Назад
-      </a>
-      <div class="hidden sm:flex items-center gap-1.5">
-        {% set cur = page %}
-        {% set total_p = total_pages %}
-        {% set ns = namespace(prev=-1) %}
-        {% for n in range(1, total_p + 1) %}
-          {% set show = (n <= 2) or (n >= total_p - 1) or ((n >= cur - 1) and (n <= cur + 1)) %}
-          {% if show %}
-            {% if ns.prev != -1 and n != ns.prev + 1 %}
-              <span class="px-2 text-gray-400">…</span>
-            {% endif %}
-            {% set ns.prev = n %}
-            {% if n == cur %}
-              <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-black text-white font-semibold font-mono tabular-nums">{{ n }}</span>
-            {% else %}
-              {% set pg_url = '/category/' ~ category.id ~ '?page=' ~ n ~ '&per_page=' ~ per_page %}
-              <a href="{{ pg_url }}" class="inline-flex items-center justify-center h-10 w-10 rounded-full border border-line bg-white hover:border-black font-mono tabular-nums transition">{{ n }}</a>
-            {% endif %}
-          {% endif %}
-        {% endfor %}
-      </div>
-      <a {% if pagination.has_next %}href="{{ pagination.next_url }}"{% else %}aria-disabled="true" tabindex="-1" class="pointer-events-none opacity-40"{% endif %}
-         class="inline-flex items-center h-10 px-5 rounded-full border border-line bg-white text-sm font-semibold hover:border-black transition whitespace-nowrap">
-        Вперёд →
-      </a>
-    </nav>
-  {% endif %}
 {% endif %}
 {% endblock %}

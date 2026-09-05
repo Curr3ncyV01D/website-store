@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}{{ (title|e) }} — Каталог{% endblock %}
+
+{% block extra_head %}
+  <meta property="og:type" content="product">
+  <meta property="og:title" content="{{ og_title|e }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta property="og:description" content="{{ og_title|e }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ og_title|e }}">
+  <meta name="twitter:image" content="{{ og_image }}">
+  <link rel="stylesheet" href="https://unpkg.com/photoswipe@5.4.5/dist/photoswipe.css">
+{% endblock %}
+
+{% block content %}
+<section class="mb-6 sm:mb-8 mt-2 sm:mt-4 mx-auto max-w-[960px] px-4 sm:px-6">
+  <nav class="flex items-center gap-2 text-sm text-muted flex-wrap" aria-label="Хлебные крошки">
+    {% for crumb in breadcrumbs %}
+      {% if not loop.last %}
+        <a href="{{ crumb.url }}" class="hover:text-black transition whitespace-nowrap">{{ crumb.name|e }}</a>
+        <span aria-hidden="true" class="text-gray-300">/</span>
+      {% else %}
+        <span class="text-black font-semibold truncate max-w-[60vw]" title="{{ crumb.name|e }}">{{ crumb.name|e }}</span>
+      {% endif %}
+    {% endfor %}
+  </nav>
+</section>
+
+<section class="mb-6 sm:mb-10 mx-auto max-w-[960px] px-4 sm:px-6">
+  <div class="flex flex-col gap-4">
+    <h1 class="font-sans font-extrabold text-2xl sm:text-3xl md:text-4xl lg:text-5xl tracking-tight text-black leading-tight">
+      {{ title|e }}
+    </h1>
+
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div class="text-sm text-muted flex items-center gap-3 flex-wrap">
+        <span class="inline-flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          В наличии
+        </span>
+        <span class="tabular-nums font-mono">Арт. A{{ '%06d' % album_id }}</span>
+        <span class="tabular-nums font-mono">{{ images|length }} фото</span>
+      </div>
+      <a href="{{ telegram_order_url }}"
+         target="_blank"
+         rel="noopener noreferrer"
+         class="hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-black hover:bg-zinc-800 active:bg-zinc-900 text-white font-semibold text-sm sm:text-base px-7 py-3.5 rounded-xl transition-colors duration-150 select-none whitespace-nowrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 fill-current" aria-hidden="true">
+          <path d="M9.04 15.47 8.9 18.9c.37 0 .53-.16.72-.34l1.74-1.67 3.63 2.66c.67.37 1.15.17 1.33-.61l2.41-11.3c.22-1-.37-1.4-1.02-1.16L4.42 11.33c-.98.39-.97.94-.17 1.19l3.02.96 6.98-4.38c.33-.22.63-.1.38.13"/>
+        </svg>
+        Заказать в Telegram
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="pb-28 sm:pb-24 bg-white">
+  <div class="mx-auto max-w-[960px] -mx-4 sm:mx-auto sm:px-0">
+    <div id="album-gallery"
+         class="flex flex-col gap-3 sm:gap-6 w-full"
+         itemscope itemtype="https://schema.org/ImageGallery">
+      {% for image_id in images %}
+        <a href="/media/image/{{ image_id }}"
+           class="pswp-item block w-full bg-line/30 overflow-hidden group"
+           data-pswp-src="/media/image/{{ image_id }}"
+           data-pswp-width="1200"
+           data-pswp-height="1200"
+           data-cropped="false"
+           target="_blank"
+           rel="noopener"
+           itemprop="contentUrl"
+           aria-label="Фото {{ loop.index }} из {{ images|length }}: {{ title|e }}">
+          <img
+            src="/media/image/{{ image_id }}"
+            alt="{{ title|e }} — фото {{ loop.index }}"
+            loading="lazy"
+            decoding="async"
+            class="w-full h-auto block select-none lazy-fade {% if loop.index == 1 %}object-cover{% endif %}"
+            style="aspect-ratio: 1 / 1;"
+            itemprop="thumbnail">
+          <div class="hidden sm:flex absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+            <div class="bg-black/70 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4 fill-current" aria-hidden="true"><path d="m15 3 2.3 2.3-3.2 3.2 1.4 1.4 3.2-3.2L21 9V3zm-6 13-2.3 2.3L10 21h6l-2.3-2.3 3.2-3.2-1.4-1.4zM3 9l2.3-2.3 3.2 3.2-1.4 1.4L3.9 9.4 3 7.7V9zm0 4 2.3 2.3 3.2-3.2 1.4 1.4L4.6 16.9 3 14.6v-1.6zm18 2.3-2.3 2.3-3.2-3.2 1.4-1.4 3.2 3.2L21 16.3v1.7zm-9-9a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm-6 4a6 6 0 1 1 12 0 6 6 0 0 1-12 0z"/></svg>
+              Увеличить
+            </div>
+          </div>
+        </a>
+      {% else %}
+        <div class="px-4 sm:px-6 py-24 text-center text-muted">
+          <div class="mx-auto w-20 h-20 rounded-2xl bg-line/60 flex items-center justify-center mb-5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-10 h-10 text-zinc-400 fill-current"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2M8.5 13.5l2.5 3.01L14.5 12l4.5 6H5z"/></svg>
+          </div>
+          <p class="font-semibold text-black mb-1">Фотографии товара загружаются</p>
+          <p class="text-sm">В ближайшее время менеджер добавит все изображения.</p>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<div class="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-line bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] pt-3 px-4">
+  <a href="{{ telegram_order_url }}"
+     target="_blank"
+     rel="noopener noreferrer"
+     class="w-full inline-flex items-center justify-center gap-2 bg-black hover:bg-zinc-800 active:bg-zinc-900 text-white font-semibold text-base px-5 py-3.5 rounded-2xl transition-colors duration-150 select-none">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5 fill-current" aria-hidden="true">
+      <path d="M9.04 15.47 8.9 18.9c.37 0 .53-.16.72-.34l1.74-1.67 3.63 2.66c.67.37 1.15.17 1.33-.61l2.41-11.3c.22-1-.37-1.4-1.02-1.16L4.42 11.33c-.98.39-.97.94-.17 1.19l3.02.96 6.98-4.38c.33-.22.63-.1.38.13"/>
+    </svg>
+    Заказать в Telegram
+  </a>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script type="module">
+    import PhotoSwipeLightbox from 'https://unpkg.com/photoswipe@5.4.5/dist/photoswipe-lightbox.esm.js';
+    const lightbox = new PhotoSwipeLightbox({
+      gallery: '#album-gallery',
+      children: 'a.pswp-item',
+      pswpModule: () => import('https://unpkg.com/photoswipe@5.4.5/dist/photoswipe.esm.js'),
+      loop: true,
+      padding: { top: 16, bottom: 16, left: 8, right: 8 },
+      showHideAnimationType: 'zoom',
+      zoomAnimationDuration: 240,
+      bgOpacity: 0.96,
+      imageClickAction: 'zoom',
+      tapAction: 'toggle-controls',
+      doubleTapAction: 'zoom',
+      closeOnVerticalDrag: true,
+      wheelToZoom: true,
+      preload: [1, 2],
+      mainClass: 'pswp--custom-bg',
+    });
+    lightbox.init();
+    window.__albumLightbox = lightbox;
+  </script>
+{% endblock %}

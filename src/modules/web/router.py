@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import math
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -12,26 +13,38 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 import aiofiles
+import asyncio
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Path as FastAPIPath, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from urllib.parse import quote as urlquote
 
-from src.core.config import get_crawl_keywords
+load_dotenv()
+
+from src.core.config import get_crawl_keywords, settings
 from src.db.models import Image
 from src.db.queries import (
     DEFAULT_PER_PAGE,
     DEFAULT_SEARCH_LIMIT,
     DEFAULT_SIMILARITY_THRESHOLD,
+    SUGGEST_DEFAULT_LIMIT,
+    SUGGEST_DEFAULT_THRESHOLD,
+    AlbumDetail,
+    PaginatedAlbums,
+    get_album_detail,
     get_category_albums_paginated,
     get_category_by_id,
     get_category_path,
     get_latest_albums,
+    get_latest_albums_paginated,
     get_root_categories_with_children,
     search_albums,
+    search_albums_suggest,
 )
 from src.db.session import dispose_engine, get_db_session, get_session_factory
 from src.services.telegram_service import TelegramService
@@ -44,8 +57,59 @@ TEMPLATES_DIR: StdLibPath = PROJECT_ROOT_PATH / "templates"
 PLACEHOLDER_FILENAME: str = "no-image.png"
 PLACEHOLDER_PATH: StdLibPath = STATIC_IMAGES_DIR / PLACEHOLDER_FILENAME
 
+FAVICON_FILENAME: str = "favicon.ico"
+FAVICON_PATH: StdLibPath = STATIC_IMAGES_DIR / FAVICON_FILENAME
+
+FAVICON_SVG_FALLBACK: str = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">'
+    '<rect width="64" height="64" rx="12" fill="#09090b"/>'
+    '<text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" '
+    'font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" '
+    'font-weight="800" font-size="28" fill="#ffffff">M</text>'
+    '</svg>'
+)
+
 CACHE_CONTROL_HEADER_VALUE: str = "public, max-age=86400"
 PLACEHOLDER_CACHE_CONTROL: str = "public, max-age=3600"
+FAVICON_CACHE_CONTROL: str = "public, max-age=7200"
+
+
+def _build_database_url_for_router() -> str:
+    from src.core.config import settings as _settings
+    user = os.getenv("DB_USER", "postgres")
+    password = os.getenv("DB_PASSWORD", "postgres")
+    host = os.getenv("DB_HOST", "localhost")
+    port = os.getenv("DB_PORT", "5432")
+    name = os.getenv("DB_NAME", "yupoo_db")
+    try:
+        if _settings and getattr(_settings, "DB_PORT", None):
+            port = str(int(getattr(_settings, "DB_PORT")))
+    except Exception:
+        pass
+    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+
+_ROUTER_DB_URL = _build_database_url_for_router()
+_ROUTER_ENGINE: Optional[AsyncEngine] = None
+_ROUTER_SESSION_FACTORY: Optional[async_sessionmaker[AsyncSession]] = None
+
+def _router_get_session_factory() -> async_sessionmaker[AsyncSession]:
+    global _ROUTER_ENGINE, _ROUTER_SESSION_FACTORY
+    if _ROUTER_SESSION_FACTORY is None:
+        _ROUTER_ENGINE = create_async_engine(
+            _ROUTER_DB_URL,
+            echo=False,
+            future=True,
+            pool_pre_ping=False,
+            pool_size=5,
+            max_overflow=10,
+        )
+        _ROUTER_SESSION_FACTORY = async_sessionmaker(
+            bind=_ROUTER_ENGINE,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+    return _ROUTER_SESSION_FACTORY
 
 
 def _templates() -> Jinja2Templates:
@@ -147,6 +211,31 @@ async def _router_startup() -> None:
     await ensure_placeholder_exists()
 
 
+@router.get("/favicon.ico", tags=["static"])
+async def favicon():
+    """
+    Возвращает favicon.ico из static/images, если он есть;
+    иначе — 204 No Content + SVG-fallback link (через <link rel=icon>)
+    либо inline SVG-заглушка, чтобы не было 404 в консоли браузера.
+    """
+    try:
+        if FAVICON_PATH.exists() and FAVICON_PATH.is_file() and FAVICON_PATH.stat().st_size > 0:
+            resp = FileResponse(
+                path=str(FAVICON_PATH),
+                media_type="image/x-icon",
+                filename=FAVICON_FILENAME,
+            )
+            resp.headers["Cache-Control"] = FAVICON_CACHE_CONTROL
+            return resp
+    except Exception as e:
+        logger.debug(f"[web.router] /favicon.ico file open fail -> fallback: {type(e).__name__}")
+
+    fallback_bytes = FAVICON_SVG_FALLBACK.encode("utf-8")
+    resp = Response(content=fallback_bytes, media_type="image/svg+xml")
+    resp.headers["Cache-Control"] = FAVICON_CACHE_CONTROL
+    return resp
+
+
 @router.get("/api/menu.json", tags=["api", "menu"])
 async def api_menu_json(session: AsyncSession = Depends(get_db_session)) -> JSONResponse:
     branches = await get_root_categories_with_children(session)
@@ -218,12 +307,23 @@ async def homepage(
     session: AsyncSession = Depends(get_db_session),
 ):
     tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
+    latest_total = 0
+    latest_total_pages = 1
     try:
         try:
             latest = await get_latest_albums(session, limit=24)
         except Exception as e:
             logger.exception(f"[web.router] homepage get_latest_albums failed: {type(e).__name__} -> empty list")
             latest = []
+        try:
+            from src.db.models import Album as _Album
+            count_stmt = select(func.count()).select_from(_Album)
+            latest_total = int((await session.execute(count_stmt)).scalar() or 0)
+        except Exception as e:
+            logger.debug(f"[web.router] homepage latest count fail: {type(e).__name__}")
+            latest_total = len(latest)
+        per_def = max(1, int(DEFAULT_PER_PAGE))
+        latest_total_pages = max(1, math.ceil(max(latest_total, len(latest)) / per_def)) if per_def > 0 else 1
         try:
             brands = await _pick_brand_category_ids(session, _top_keyword_brands(), limit_per_brand=1)
         except Exception as e:
@@ -235,13 +335,67 @@ async def homepage(
         logger.exception(f"[web.router] homepage CRITICAL: {type(e).__name__} -> graceful empty page")
         latest = []
         brands = []
+        latest_total = 0
+        latest_total_pages = 1
     context = {
         "request": request,
         "latest_albums": latest,
         "recommended_brands": brands,
         "latest_count": len(latest),
+        "latest_total_albums": latest_total,
+        "latest_total_pages": latest_total_pages,
     }
     return tpl.TemplateResponse("index.html", context)
+
+
+@router.get("/partial/albums", response_class=HTMLResponse, tags=["partial"])
+async def partial_albums_grid(
+    request: Request,
+    page: int = Query(default=1, ge=1, le=100000),
+    per_page: int = Query(default=DEFAULT_PER_PAGE, ge=12, le=96),
+    category_id: Optional[int] = Query(default=None, ge=1, le=10**9),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    HTMX-fragment: только HTML сетки карточек + sentinel hx-trigger=revealed следующей страницы.
+    Без layout/base, без хедера/футера.
+    """
+    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
+    pagination: Optional[PaginatedAlbums] = None
+    try:
+        if category_id is None:
+            pagination = await get_latest_albums_paginated(session, page=page, per_page=per_page)
+        else:
+            cat = await get_category_by_id(session, category_id)
+            if cat is None:
+                pagination = PaginatedAlbums(items=[], page=page, per_page=per_page, total=0, total_pages=1, has_prev=False, has_next=False)
+            else:
+                pagination = await get_category_albums_paginated(session, category_id, page=page, per_page=per_page)
+    except BaseException as e:
+        if "CancelledError" in type(e).__name__:
+            raise
+        logger.exception(f"[web.router] /partial/albums page={page} category_id={category_id}: {type(e).__name__}")
+        pagination = PaginatedAlbums(items=[], page=page, per_page=per_page, total=0, total_pages=1, has_prev=False, has_next=False)
+
+    next_url_parts = [f"/partial/albums?page={int(page) + 1}&per_page={int(per_page)}"]
+    if category_id is not None:
+        next_url_parts[0] += f"&category_id={int(category_id)}"
+    next_url = next_url_parts[0]
+
+    albums = list(pagination.items or [])
+    ctx = {
+        "request": request,
+        "page": int(page),
+        "albums": albums,
+        "has_next": bool(getattr(pagination, "has_next", False)),
+        "next_url": next_url,
+    }
+    resp = tpl.TemplateResponse("components/album_grid_chunk.html", ctx)
+    try:
+        resp.headers["Cache-Control"] = "private, no-store, max-age=0"
+    except Exception:
+        pass
+    return resp
 
 
 @router.get("/category/{category_id}", response_class=HTMLResponse, tags=["pages"])
@@ -311,15 +465,66 @@ async def category_page(
     return tpl.TemplateResponse("category.html", context)
 
 
-@router.get("/album/{album_id}", tags=["pages (stub)"])
-async def album_page_stub(
+@router.get("/album/{album_id}", response_class=HTMLResponse, tags=["pages"])
+async def album_page(
+    request: Request,
     album_id: int = FastAPIPath(..., ge=1),
-) -> dict:
-    return {
-        "page": "album",
-        "album_id": album_id,
-        "status": "stub — Jinja2 gallery rendering upcoming in Phase 4",
+):
+    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
+    detail: Optional[AlbumDetail] = None
+    sf: async_sessionmaker[AsyncSession] = _router_get_session_factory()
+    async with sf() as s2:
+        try:
+            detail = await get_album_detail(s2, album_id)
+        except BaseException as be:
+            if isinstance(be, (TimeoutError, ConnectionError, asyncio.CancelledError)):
+                detail = None
+            else:
+                logger.exception(
+                    f"[web.router] /album/{album_id} get_album_detail raised {type(be).__name__}: {be}"
+                )
+                detail = None
+    if detail is None or not detail.clean_title:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    # Reseller Protection:
+    # NEVER pass original_title or weidian_url into template context.
+    og_title = detail.clean_title or "Товар"
+    og_image = f"/media/image/{detail.cover_image_id}" if detail.cover_image_id else f"/static/images/{PLACEHOLDER_FILENAME}"
+
+    manager_username = str(getattr(settings, "MANAGER_USERNAME", "") or "").strip()
+    if not manager_username:
+        manager_username = "durov"
+    manager_username_clean = manager_username.lstrip("@")
+
+    try:
+        current_url = str(request.url)
+    except Exception:
+        current_url = f"/album/{detail.album_id}"
+    prefill_text = f"Здравствуйте! Хочу заказать этот товар: {detail.clean_title}. Ссылка: {current_url}"
+    try:
+        tg_url = f"https://t.me/{manager_username_clean}?text={urlquote(prefill_text, safe='')}"
+    except Exception:
+        tg_url = f"https://t.me/{manager_username_clean}"
+
+    # breadcrumbs: keep Главная/Категория/Товар as expected; last one is plain text, not link
+    breadcrumbs = list(detail.breadcrumbs or [])
+    if not breadcrumbs or breadcrumbs[0].name != "Главная":
+        breadcrumbs = [BreadcrumbItem(id=None, name="Главная", url="/")] + breadcrumbs
+
+    context: dict = {
+        "request": request,
+        "album": detail,
+        "album_id": detail.album_id,
+        "title": detail.clean_title,
+        "images": detail.images,
+        "breadcrumbs": breadcrumbs,
+        "og_title": og_title,
+        "og_image": og_image,
+        "telegram_order_url": tg_url,
     }
+    logger.info(f"[web.router] /album/{detail.album_id} detail rendered ({len(detail.images or [])} images)")
+    return tpl.TemplateResponse("album.html", context)
 
 
 @router.get("/search", response_class=HTMLResponse, tags=["search"])
@@ -470,3 +675,54 @@ async def get_media_image(
     resp.headers["Cache-Control"] = CACHE_CONTROL_HEADER_VALUE
     resp.headers["X-Cache"] = "MISS (from TG this time)"
     return resp
+
+
+@router.get("/api/search/suggest", tags=["api", "search"])
+async def api_search_suggest(
+    q: Optional[str] = Query(default=None, min_length=0, max_length=200),
+    limit: int = Query(default=SUGGEST_DEFAULT_LIMIT, ge=1, le=50),
+    threshold: float = Query(default=SUGGEST_DEFAULT_THRESHOLD, gt=0.0, lt=1.0),
+    session: AsyncSession = Depends(get_db_session),
+):
+    q_raw = (q or "").strip()
+    if not q_raw or len(q_raw) < 3:
+        return JSONResponse(content=[], status_code=status.HTTP_200_OK)
+
+    try:
+        results = await search_albums_suggest(
+            session, q_raw, limit=limit, threshold=threshold
+        )
+    except BaseException as e:
+        if "CancelledError" in type(e).__name__:
+            raise
+        logger.exception(
+            f"[web.router] /api/search/suggest q={q_raw!r} FAIL -> empty: {type(e).__name__}"
+        )
+        results = []
+
+    payload: list = []
+    try:
+        for r in results:
+            try:
+                if isinstance(r, dict):
+                    payload.append(
+                        {
+                            "id": int(r["id"]),
+                            "title": str(r.get("title") or ""),
+                            "image_id": (int(r["image_id"]) if r.get("image_id") is not None else None),
+                            "url": str(r.get("url") or f"/album/{int(r['id'])}"),
+                        }
+                    )
+                else:
+                    payload.append(jsonable_encoder(r))
+            except Exception as row_err:
+                logger.warning(
+                    f"[web.router] /api/search/suggest skip bad row {r!r}: {row_err}"
+                )
+    except Exception as e:
+        logger.exception(
+            f"[web.router] /api/search/suggest payload encode failed -> []: {type(e).__name__}"
+        )
+        payload = []
+
+    return JSONResponse(content=payload, status_code=status.HTTP_200_OK)

@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     # The field_validator below converts the string (or list/tuple default override) into list[str].
     CRAWL_KEYWORDS: Any = ""
 
+    MANAGER_USERNAME: str = "durov"
+
     @field_validator("CRAWL_KEYWORDS", mode="before")
     @classmethod
     def _to_csv_list(cls, v: Any) -> Any:
