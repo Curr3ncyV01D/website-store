@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Поиск: {{ query|e }} — MARKETPLACE{% endblock %}
+
+{% block content %}
+<section class="mb-6 sm:mb-8">
+  <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-2">Результаты поиска</div>
+  <h1 class="font-sans font-extrabold text-3xl sm:text-4xl md:text-5xl tracking-tight text-black">
+    По запросу &laquo;{{ query|e }}&raquo;
+  </h1>
+  <p class="text-muted text-sm sm:text-base mt-2">
+    Найдено <span class="font-mono tabular-nums">{{ count }}</span> товар{% if count % 10 == 1 and count % 100 != 11 %}{% elif 2 <= count % 10 <= 4 and not (12 <= count % 100 <= 14) %}а{% else %}ов{% endif %}
+    · порог схожести ≥ 0.3 · <a href="/" class="underline hover:text-black">← Вернуться на главную</a>
+  </p>
+</section>
+
+{% if count == 0 %}
+  <section class="mb-10">
+    <div class="text-center py-20 border border-dashed border-line rounded-2xl bg-white">
+      <h2 class="font-sans font-bold text-2xl tracking-tight text-black mb-2">Ничего не найдено</h2>
+      <p class="text-muted text-sm">Попробуйте другой запрос — fuzzy-поиск понимает опечатки (например, «Nkie» найдёт «Nike»).</p>
+    </div>
+  </section>
+{% else %}
+  <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
+    {% for hit in results %}
+      {% set cover_src = '/media/image/' ~ hit.cover_image_id if hit.cover_image_id else '/static/images/no-image.png' %}
+      <a href="/album/{{ hit.album.id }}" class="group block">
+        <div class="h-full flex flex-col rounded-xl overflow-hidden bg-white border border-transparent transition-all duration-300 ease-out group-hover:shadow-card group-hover:border-gray-200">
+          <div class="aspect-square overflow-hidden bg-gray-100">
+            <img loading="lazy" decoding="async" src="{{ cover_src }}" alt="{{ hit.album.clean_title|e }}"
+                 class="w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105"
+                 onerror="this.onerror=null;this.src='/static/images/no-image.png';">
+          </div>
+          <div class="p-4 pt-3.5 pb-4 flex-1 flex flex-col justify-start">
+            <h3 class="text-[13.5px] leading-snug line-clamp-2 text-black font-medium">
+              {{ hit.album.clean_title|e }}
+            </h3>
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </section>
+{% endif %}
+{% endblock %}

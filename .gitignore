@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Project specific - Data & Cache (КРИТИЧНО)
+# Игнорируем всю папку data, так как там будут лежать терабайты кэшированных фото
+data/
+# Если вдруг решишь хранить сессии playwright локально
+.auth/
+
+# Playwright
+/test-results/
+/pw-browsers/
+
+# Database
+# Игнорируем локальные дампы, если будешь их делать
+*.sql
+*.sqlite
+
+# Alembic
+# Сами миграции игнорировать НЕЛЬЗЯ, но кэш нужно
+alembic/__pycache__/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
