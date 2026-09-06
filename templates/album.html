@@ -59,7 +59,7 @@
 <div id="album-gallery" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-3">
   {% for image_id in images %}
     <a href="/media/image/{{ image_id }}" 
-       class="pswp-link group relative block aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-zoom-in"
+       class="pswp-link group relative block aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-zoom-in transition-all hover:ring-2 hover:ring-black hover:ring-offset-2"
        data-pswp-src="/media/image/{{ image_id }}"
        data-pswp-width="1000" 
        data-pswp-height="1000">
@@ -67,7 +67,7 @@
       <img src="/media/image/{{ image_id }}" 
            alt="Фото {{ loop.index }}"
            loading="lazy"
-           class="w-full h-full object-cover aspect-square lazy-fade"
+           class="w-full h-full object-cover aspect-square lazy-fade transition-transform duration-500 ease-in-out group-hover:scale-110"
            onload="updatePswpAttributes(this); this.classList.add('is-loaded');">
       
       <!-- Overlay при наведении -->
