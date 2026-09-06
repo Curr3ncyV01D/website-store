@@ -88,6 +88,9 @@ class TelegramService:
             )
 
         self._bot: Optional[Bot] = None
+        self._start_lock: Optional[asyncio.Lock] = None
+        self._stop_lock: Optional[asyncio.Lock] = None
+        self._started: bool = False
         logger.info(
             f"[TelegramService] initialized (chat_id={self.chat_id!r}, "
             f"max_retries={self.max_retries}, request_timeout={self.request_timeout}s)"
@@ -107,55 +110,75 @@ class TelegramService:
         else:
             logger.info("[TelegramService] Running without proxy")
 
-    async def start(self) -> None:
-        if self._bot is not None:
-            return
+    def _ensure_locks(self) -> None:
+        if self._start_lock is None:
+            self._start_lock = asyncio.Lock()
+        if self._stop_lock is None:
+            self._stop_lock = asyncio.Lock()
 
-        timeout = ClientTimeout(total=float(self.request_timeout))
-        if self.proxy_url:
-            self._session = AiohttpSession(
-                proxy=self.proxy_url,
-                timeout=timeout,
-            )
-            logger.info(
-                f"[TelegramService] starting Bot via proxy (timeout={self.request_timeout}s)..."
-            )
-            self._bot = Bot(
-                token=self.bot_token,
-                session=self._session,
-                default=DefaultBotProperties(parse_mode=None, protect_content=None),
-            )
-        else:
-            self._session = AiohttpSession(timeout=timeout)
-            logger.info(
-                f"[TelegramService] starting Bot DIRECT (no proxy, timeout={self.request_timeout}s)..."
-            )
-            self._bot = Bot(
-                token=self.bot_token,
-                session=self._session,
-                default=DefaultBotProperties(parse_mode=None, protect_content=None),
-            )
-        logger.info("[TelegramService] aiogram Bot started")
+    def is_running(self) -> bool:
+        return self._started and self._bot is not None
+
+    async def start(self) -> None:
+        self._ensure_locks()
+        assert self._start_lock is not None
+        if self._started and self._bot is not None:
+            return
+        async with self._start_lock:
+            if self._started and self._bot is not None:
+                return
+
+            timeout = ClientTimeout(total=float(self.request_timeout))
+            if self.proxy_url:
+                self._session = AiohttpSession(
+                    proxy=self.proxy_url,
+                    timeout=timeout,
+                )
+                logger.info(
+                    f"[TelegramService] starting Bot via proxy (timeout={self.request_timeout}s)..."
+                )
+                self._bot = Bot(
+                    token=self.bot_token,
+                    session=self._session,
+                    default=DefaultBotProperties(parse_mode=None, protect_content=None),
+                )
+            else:
+                self._session = AiohttpSession(timeout=timeout)
+                logger.info(
+                    f"[TelegramService] starting Bot DIRECT (no proxy, timeout={self.request_timeout}s)..."
+                )
+                self._bot = Bot(
+                    token=self.bot_token,
+                    session=self._session,
+                    default=DefaultBotProperties(parse_mode=None, protect_content=None),
+                )
+            self._started = True
+            logger.info("[TelegramService] aiogram Bot started (singleton session ready)")
 
     async def stop(self) -> None:
-        if self._bot is None and self._session is None:
-            return
-        session_to_close = self._session
-        try:
-            if self._bot is not None:
-                try:
-                    await self._bot.session.close()
-                except Exception as e:
-                    logger.debug(f"[TelegramService] bot.session.close ignored: {e}")
-        finally:
-            self._bot = None
-            if session_to_close is not None:
-                try:
-                    await session_to_close.close()
-                except Exception as e:
-                    logger.debug(f"[TelegramService] AiohttpSession.close ignored: {e}")
-            self._session = None
-            logger.info("[TelegramService] aiogram Bot stopped")
+        self._ensure_locks()
+        assert self._stop_lock is not None
+        async with self._stop_lock:
+            if not self._started and self._bot is None and self._session is None:
+                return
+            session_to_close = self._session
+            bot_to_close = self._bot
+            try:
+                if bot_to_close is not None:
+                    try:
+                        await bot_to_close.session.close()
+                    except Exception as e:
+                        logger.debug(f"[TelegramService] bot.session.close ignored: {e}")
+            finally:
+                self._bot = None
+                self._started = False
+                if session_to_close is not None:
+                    try:
+                        await session_to_close.close()
+                    except Exception as e:
+                        logger.debug(f"[TelegramService] AiohttpSession.close ignored: {e}")
+                self._session = None
+                logger.info("[TelegramService] aiogram Bot stopped")
 
     async def __aenter__(self) -> "TelegramService":
         await self.start()

@@ -47,7 +47,6 @@ from src.db.queries import (
     search_albums_suggest,
 )
 from src.db.session import dispose_engine, get_db_session, get_session_factory
-from src.services.telegram_service import TelegramService
 
 PROJECT_ROOT_PATH: StdLibPath = StdLibPath(PROJECT_ROOT)
 STATIC_IMAGES_DIR: StdLibPath = PROJECT_ROOT_PATH / "static" / "images"
@@ -153,49 +152,6 @@ async def ensure_placeholder_exists() -> None:
         )
     except Exception as e:
         logger.exception(f"[web.router] FAILED to write placeholder {PLACEHOLDER_PATH}: {e}")
-
-
-_TG_SINGLETON: Optional[TelegramService] = None
-_TG_STARTED: bool = False
-
-
-@asynccontextmanager
-async def _lifespan_tg_provider():
-    global _TG_SINGLETON, _TG_STARTED
-    ensure_dirs()
-    await ensure_placeholder_exists()
-    if _TG_SINGLETON is None:
-        _TG_SINGLETON = TelegramService()
-    if not _TG_STARTED:
-        try:
-            await _TG_SINGLETON.start()
-            _TG_STARTED = True
-            logger.info("[web.router] TelegramService singleton started")
-        except Exception as e:
-            logger.exception(
-                f"[web.router] TelegramService failed to start (download will use placeholder): {e}"
-            )
-    try:
-        yield _TG_SINGLETON
-    finally:
-        if _TG_SINGLETON is not None and _TG_STARTED:
-            try:
-                await _TG_SINGLETON.stop()
-            except Exception as e:
-                logger.debug(f"[web.router] TelegramService stop ignored: {e}")
-            finally:
-                _TG_STARTED = False
-                _TG_SINGLETON = None
-                try:
-                    await dispose_engine()
-                except Exception as e:
-                    logger.debug(f"[web.router] dispose_engine ignored: {e}")
-
-
-@asynccontextmanager
-async def request_scoped_dependencies():
-    async with _lifespan_tg_provider() as tg:
-        yield tg
 
 
 def _cache_path_for(image_id: int) -> StdLibPath:
@@ -569,14 +525,17 @@ def _placeholder_response(*, error_message: Optional[str] = None) -> Response:
         resp = FileResponse(
             path=PLACEHOLDER_PATH,
             media_type="image/png",
-            filename=PLACEHOLDER_FILENAME,
         )
+        resp.headers["Content-Disposition"] = "inline"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Cache-Control"] = PLACEHOLDER_CACHE_CONTROL
         if error_message:
             resp.headers["X-Placeholder-Reason"] = str(error_message)[:200]
         return resp
     data = _build_minimal_placeholder_png_bytes()
     resp = Response(content=data, media_type="image/png")
+    resp.headers["Content-Disposition"] = "inline"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Cache-Control"] = PLACEHOLDER_CACHE_CONTROL
     if error_message:
         resp.headers["X-Placeholder-Reason"] = str(error_message)[:200]
@@ -585,6 +544,7 @@ def _placeholder_response(*, error_message: Optional[str] = None) -> Response:
 
 @router.get("/media/image/{image_id}", tags=["media"])
 async def get_media_image(
+    request: Request,
     image_id: int = FastAPIPath(..., ge=1),
     session: AsyncSession = Depends(get_db_session),
     session_factory: async_sessionmaker[AsyncSession] = Depends(get_session_factory),
@@ -599,8 +559,10 @@ async def get_media_image(
             resp = FileResponse(
                 path=cache_path,
                 media_type="image/jpeg",
-                filename=f"{image_id}.jpg",
             )
+            # Explicitly inline = never trigger Save-As dialog; browsers render inline.
+            resp.headers["Content-Disposition"] = "inline"
+            resp.headers["X-Content-Type-Options"] = "nosniff"
             resp.headers["Cache-Control"] = CACHE_CONTROL_HEADER_VALUE
             resp.headers["X-Cache"] = "HIT"
             return resp
@@ -634,21 +596,27 @@ async def get_media_image(
         )
         return _placeholder_response(error_message="empty_tg_file_id")
 
-    async with request_scoped_dependencies() as tg:
-        if tg is None:
-            logger.error(
-                f"[web.router] /media/image/{image_id}: TelegramService is unavailable -> placeholder"
-            )
-            return _placeholder_response(error_message="telegram_service_unavailable")
-        try:
-            raw_bytes: bytes = await tg.download_file(str(tg_file_id))
-        except Exception as e:
-            logger.exception(
-                f"[web.router] /media/image/{image_id}: TelegramService download_file failed -> placeholder"
-            )
-            return _placeholder_response(
-                error_message=f"tg_download_error: {type(e).__name__}: {str(e)[:120]}"
-            )
+    tg_service = getattr(getattr(request, "app", None), "state", None)
+    tg = None
+    if tg_service is not None:
+        tg = getattr(tg_service, "tg_service", None)
+
+    if tg is None:
+        logger.error(
+            f"[web.router] /media/image/{image_id}: TelegramService singleton MISSING in app.state "
+            f"(lifespan failed or TG_TOKEN/TG_CHAT_ID wrong? check startup logs) -> placeholder"
+        )
+        return _placeholder_response(error_message="tg_service_missing_in_app_state")
+
+    try:
+        raw_bytes: bytes = await tg.download_file(str(tg_file_id))
+    except Exception as e:
+        logger.exception(
+            f"[web.router] /media/image/{image_id}: TelegramService download_file failed -> placeholder"
+        )
+        return _placeholder_response(
+            error_message=f"tg_download_error: {type(e).__name__}: {str(e)[:120]}"
+        )
 
     if not raw_bytes:
         logger.error(
@@ -673,10 +641,11 @@ async def get_media_image(
         resp = FileResponse(
             path=cache_path,
             media_type="image/jpeg",
-            filename=f"{image_id}.jpg",
         )
     else:
         resp = Response(content=raw_bytes, media_type="image/jpeg")
+    resp.headers["Content-Disposition"] = "inline"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Cache-Control"] = CACHE_CONTROL_HEADER_VALUE
     resp.headers["X-Cache"] = "MISS (from TG this time)"
     return resp

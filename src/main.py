@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from src.modules.web.router import router as web_router
+from src.services.telegram_service import TelegramService
 
 STATIC_IMAGES_DIR: Path = Path(PROJECT_ROOT) / "static" / "images"
 STATIC_DIR: Path = Path(PROJECT_ROOT) / "static"
@@ -42,7 +43,39 @@ async def lifespan(app: FastAPI):
     logger.info(
         f"[web] FastAPI lifespan startup: templates_dir={TEMPLATES_DIR}, static_dir={STATIC_DIR}, static_images={STATIC_IMAGES_DIR}, media_cache={MEDIA_CACHE_DIR}"
     )
+
+    tg_service: Optional[TelegramService] = None
+    try:
+        tg_service = TelegramService()
+        try:
+            await tg_service.start()
+            app.state.tg_service = tg_service
+            logger.info("[web] [TelegramService] Lifespan: singleton started OK (long-lived Bot/AiohttpSession ready)")
+        except Exception as e:
+            logger.exception(
+                f"[web] [TelegramService] Lifespan: start FAILED -> /media/image will serve placeholder fallback. "
+                f"Error: {type(e).__name__}: {e}"
+            )
+            app.state.tg_service = None
+    except Exception as e:
+        logger.exception(
+            f"[web] [TelegramService] Lifespan: instantiate() failed (check TG_TOKEN/TG_CHAT_ID in .env) "
+            f"-> /media/image will serve placeholder. Error: {type(e).__name__}: {e}"
+        )
+        app.state.tg_service = None
+
     yield
+
+    if tg_service is not None:
+        try:
+            await tg_service.stop()
+            logger.info("[web] [TelegramService] Lifespan: singleton stopped OK")
+        except Exception as e:
+            logger.debug(f"[web] [TelegramService] Lifespan: stop() ignored: {e}")
+        finally:
+            if getattr(app.state, "tg_service", None) is tg_service:
+                app.state.tg_service = None
+
     logger.info("[web] FastAPI lifespan shutdown")
 
 
