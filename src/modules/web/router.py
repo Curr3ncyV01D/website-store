@@ -493,15 +493,20 @@ async def album_page(
     og_image = f"/media/image/{detail.cover_image_id}" if detail.cover_image_id else f"/static/images/{PLACEHOLDER_FILENAME}"
 
     manager_username = str(getattr(settings, "MANAGER_USERNAME", "") or "").strip()
-    if not manager_username:
-        manager_username = "durov"
     manager_username_clean = manager_username.lstrip("@")
+
+    tpl_msg = str(getattr(settings, "TELEGRAM_ORDER_MESSAGE", "") or "").strip()
+    if not tpl_msg:
+        tpl_msg = 'Здравствуйте! Хочу заказать этот товар: "{title}". Ссылка: {url}'
 
     try:
         current_url = str(request.url)
     except Exception:
         current_url = f"/album/{detail.album_id}"
-    prefill_text = f"Здравствуйте! Хочу заказать этот товар: {detail.clean_title}. Ссылка: {current_url}"
+    try:
+        prefill_text = tpl_msg.format(title=detail.clean_title, url=current_url)
+    except Exception:
+        prefill_text = f'Здравствуйте! Хочу заказать этот товар: "{detail.clean_title}". Ссылка: {current_url}'
     try:
         tg_url = f"https://t.me/{manager_username_clean}?text={urlquote(prefill_text, safe='')}"
     except Exception:

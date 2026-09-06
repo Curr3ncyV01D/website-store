@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     # The field_validator below converts the string (or list/tuple default override) into list[str].
     CRAWL_KEYWORDS: Any = ""
 
-    MANAGER_USERNAME: str = "durov"
+    MANAGER_USERNAME: str = "ManagerSem"
+    TELEGRAM_ORDER_MESSAGE: str = 'Здравствуйте! Хочу заказать этот товар: "{title}". Ссылка: {url}'
 
     @field_validator("CRAWL_KEYWORDS", mode="before")
     @classmethod
