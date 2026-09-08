@@ -1,11 +1,11 @@
 {% if not albums %}
   {% if page == 1 %}
-    <div class="col-span-full text-center py-16 border border-dashed border-line rounded-2xl bg-white">
+    <div class="col-span-full text-center py-10 md:py-16 border border-dashed border-line rounded-2xl bg-white">
       <h3 class="font-sans font-bold text-xl tracking-tight text-black mb-2">Здесь пока пусто</h3>
       <p class="text-sm text-muted">Запустите crawler и Telegram-worker, чтобы наполнить каталог товарами.</p>
     </div>
   {% else %}
-    <div class="col-span-full text-center py-10 text-muted text-sm tracking-tight" aria-label="Конец каталога">
+    <div class="col-span-full text-center py-6 md:py-10 text-muted text-sm tracking-tight" aria-label="Конец каталога">
       <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-line bg-white/80">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -18,16 +18,16 @@
   {% for card in albums %}
     {% set cover_src = '/media/image/' ~ card.cover_image_id if card.cover_image_id else '/static/images/no-image.png' %}
     <a href="/album/{{ card.album_id }}" class="group block album-card htmx-fade-in">
-      <div class="h-full flex flex-col rounded-xl overflow-hidden bg-white border border-transparent transition-all duration-300 ease-out group-hover:shadow-card group-hover:border-gray-200">
-        <div class="aspect-square overflow-hidden bg-gray-100">
+      <div class="h-full flex flex-col rounded-lg md:rounded-xl overflow-hidden bg-white border border-transparent transition-all duration-300 ease-out group-hover:shadow-card group-hover:border-gray-200">
+        <div class="aspect-square overflow-hidden bg-gray-100 rounded-lg md:rounded-xl">
           <img loading="lazy" decoding="async"
                src="{{ cover_src }}"
                alt="{{ card.clean_title|e }}"
                class="w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105 lazy-fade"
                onerror="this.onerror=null;this.src='/static/images/no-image.png';">
         </div>
-        <div class="p-4 pt-3.5 pb-4 flex-1 flex flex-col justify-start">
-          <h3 class="text-[13.5px] leading-snug line-clamp-2 text-black font-medium">
+        <div class="px-2 md:px-4 pt-2 md:pt-3.5 pb-2.5 md:pb-4 flex-1 flex flex-col justify-start">
+          <h3 class="text-[12px] md:text-[13.5px] leading-[1.25] md:leading-snug line-clamp-2 text-black font-medium">
             {{ card.clean_title|e }}
           </h3>
         </div>
@@ -47,14 +47,14 @@
         class="h-0 w-full opacity-0 pointer-events-none"
         aria-hidden="true"
       ></div>
-      <div class="htmx-sentinel-indicator-{{ page }} htmx-indicator grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6 w-full col-span-full mt-1">
+      <div class="htmx-sentinel-indicator-{{ page }} htmx-indicator grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-5 sm:gap-6 w-full col-span-full mt-1">
         {% for _ in range(6) %}
           {% include "components/skeleton_card.html" %}
         {% endfor %}
       </div>
     </div>
   {% else %}
-    <div class="col-span-full text-center py-10 text-muted text-sm tracking-tight" aria-label="Конец каталога">
+    <div class="col-span-full text-center py-6 md:py-10 text-muted text-sm tracking-tight" aria-label="Конец каталога">
       <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-line bg-white/80">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>

@@ -3,32 +3,30 @@
 {% block title %}MARKETPLACE — Каталог уличного стиля и кроссовок{% endblock %}
 
 {% block content %}
-<section class="mb-10">
-  <div class="h-scroll overflow-x-auto pb-3">
-    <div class="flex items-center gap-3 min-w-max">
-      {% if recommended_brands|length == 0 %}
-        <span class="text-sm text-muted">Популярные бренды появятся здесь после запуска crawler.</span>
-      {% else %}
-        {% for kw, cid, cname in recommended_brands %}
-          <a href="/category/{{ cid }}"
-             class="inline-flex items-center h-10 px-4 rounded-full border border-line bg-white text-sm font-semibold tracking-tight text-black hover:border-black hover:-translate-y-0.5 hover:shadow-md transition whitespace-nowrap">
-            {{ cname }}
-          </a>
-        {% endfor %}
-      {% endif %}
+{% if recommended_brands %}
+<section class="mb-6 md:mb-10">
+  <div class="h-scroll overflow-x-auto pb-2 md:pb-3 scrollbar-hide">
+    <div class="flex items-center gap-2 md:gap-3 min-w-max snap-x">
+      {% for kw, cid, cname in recommended_brands %}
+        <a href="/category/{{ cid }}"
+           class="inline-flex items-center h-9 md:h-10 px-3.5 md:px-5 rounded-full border border-line bg-white text-sm font-semibold tracking-tight text-black hover:border-black hover:-translate-y-0.5 hover:shadow-md transition whitespace-nowrap snap-start">
+          {{ cname }}
+        </a>
+      {% endfor %}
     </div>
   </div>
 </section>
+{% endif %}
 
-<section class="mb-12">
-  <div class="flex items-end justify-between mb-6 sm:mb-8">
+<section class="mb-8 md:mb-12">
+  <div class="flex items-end justify-between mb-4 md:mb-6 sm:mb-8">
     <div>
-      <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5">Новое поступление</div>
-      <h2 class="font-sans font-extrabold text-[26px] sm:text-3xl tracking-tight text-black leading-tight">Последние новинки</h2>
+      <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-1 md:mb-1.5">Новое поступление</div>
+      <h2 class="font-sans font-extrabold text-[22px] md:text-[26px] sm:text-3xl tracking-tight text-black leading-tight">Последние новинки</h2>
     </div>
   </div>
   {% if latest_albums|length == 0 %}
-    <div class="text-center text-muted py-20 border border-dashed border-line rounded-2xl bg-white">
+    <div class="text-center text-muted py-10 md:py-20 border border-dashed border-line rounded-2xl bg-white">
       <h3 class="font-sans font-bold text-xl tracking-tight text-black mb-2">Здесь пока пусто</h3>
       <p class="text-sm">Запустите crawler и Telegram-worker, чтобы наполнить каталог товарами.</p>
     </div>
@@ -36,7 +34,7 @@
     {% set first_page_albums = latest_albums %}
     {% set first_page_has_next = latest_total_albums is defined and latest_total_pages is defined and 1 < latest_total_pages %}
     {% set first_page_next = '/partial/albums?page=2' %}
-    <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
+    <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-5 sm:gap-6">
       {% with albums=first_page_albums, page=1, has_next=first_page_has_next, next_url=first_page_next %}
         {% include "components/album_grid_chunk.html" %}
       {% endwith %}

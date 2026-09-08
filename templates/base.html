@@ -36,9 +36,11 @@
     }
   </script>
   <style>
-    html, body { background-color: #fafafa; scroll-behavior: smooth; }
+    html, body { background-color: #fafafa; scroll-behavior: smooth; overflow-x: visible; }
     .h-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .h-scroll::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; scroll-behavior: smooth; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
     [x-cloak] { display: none !important; }
     .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; display: none; }
     .htmx-request .htmx-indicator { opacity: 1; display: grid; }
@@ -83,7 +85,19 @@
   </script>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-bg text-ink font-sans antialiased min-h-screen">
+<body
+  class="bg-bg text-ink font-sans antialiased min-h-screen"
+  x-data='{
+    searchLocked: false,
+    _searchOpen: false,
+    _isMobile() { return window.innerWidth < 768; },
+    _updateLock() { this.searchLocked = this._isMobile() && this._searchOpen; }
+  }'
+  @search-open.window="_searchOpen = true; _updateLock()"
+  @search-close.window="_searchOpen = false; _updateLock()"
+  @resize.window="_updateLock()"
+  :class="{ 'overflow-hidden': searchLocked }"
+>
 
 {% set initial_query = query|default("", true) %}
 
@@ -91,28 +105,50 @@
   class="sticky top-0 z-50 border-b border-line backdrop-blur-md bg-white/80"
   x-data='{
     open: false,
-  q: {{ (initial_query | string) | tojson }},
-  results: [],
-  loading: false,
-  idx: -1,
-  _abort: null,
-  emitGlobal(ev, detail) {
-    try { document.dispatchEvent(new CustomEvent(ev, { detail: detail || {} })); } catch (_) {}
-  },
-  close() {
-    this.open = false;
-    this.emitGlobal("search-close");
-    this.loading = false;
-    this.results = [];
-    this.idx = -1;
-    try { if (this._abort) { this._abort.abort(); this._abort = null; } } catch (_) {}
-  },
-  onFocus() {
-    this.open = true;
-    this.emitGlobal("search-open");
-    this.idx = -1;
-    if ((this.q || "").trim().length >= 3 && this.results.length === 0) this.onInput();
-  },
+    mobileOpen: false,
+    q: {{ (initial_query | string) | tojson }},
+    results: [],
+    loading: false,
+    idx: -1,
+    _abort: null,
+    emitGlobal(ev, detail) {
+      try { document.dispatchEvent(new CustomEvent(ev, { detail: detail || {} })); } catch (_) {}
+    },
+    closeAll() {
+      this.open = false;
+      this.mobileOpen = false;
+      this.emitGlobal("search-close");
+      this.loading = false;
+      this.results = [];
+      this.idx = -1;
+      try { if (this._abort) { this._abort.abort(); this._abort = null; } } catch (_) {}
+    },
+    openDesktop() {
+      this.open = true;
+      this.emitGlobal("search-open");
+      this.idx = -1;
+      if ((this.q || "").trim().length >= 3 && this.results.length === 0) this.onInput();
+    },
+    openMobile($nextTick) {
+      this.mobileOpen = true;
+      this.open = true;
+      this.emitGlobal("search-open");
+      this.idx = -1;
+      $nextTick(() => {
+        const el = document.getElementById("mobile-search-input");
+        if (el) { el.focus(); el.select && el.select(); }
+      });
+      if ((this.q || "").trim().length >= 3 && this.results.length === 0) this.onInput();
+    },
+    closeMobile() {
+      this.open = false;
+      this.mobileOpen = false;
+      this.emitGlobal("search-close");
+      this.loading = false;
+      this.results = [];
+      this.idx = -1;
+      try { if (this._abort) { this._abort.abort(); this._abort = null; } } catch (_) {}
+    },
     onInput() {
       this.idx = -1;
       const val = (this.q || "").trim();
@@ -146,181 +182,357 @@
     goResult() {
       if (this.idx >= 0 && this.idx < this.results.length) {
         const u = (this.results[this.idx] && this.results[this.idx].url) || null;
-        if (u) { const url = u; this.close(); window.location.href = url; return; }
+        if (u) { const url = u; this.closeAll(); window.location.href = url; return; }
       }
       this.submitFull();
     },
     submitFull() {
       const val = (this.q || "").trim();
       const url = "/search?q=" + encodeURIComponent(val);
-      this.close();
+      this.closeAll();
       window.location.href = url;
     },
     allUrl() { return "/search?q=" + encodeURIComponent((this.q || "").trim()); }
   }'
-  @keydown.escape.window="close()"
+  @keydown.escape.window="closeAll()"
 >
-  <div class="relative max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center gap-3 sm:gap-4 transition-all duration-300 ease-in-out">
-    <div class="flex items-center shrink-0">
-      <button id="menu-open" type="button" aria-label="Открыть меню брендов"
-              class="inline-flex items-center h-10 pl-3 pr-4 rounded-full text-sm font-semibold text-black hover:bg-gray-100 transition gap-2">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <span class="tracking-tight hidden sm:inline">МЕНЮ</span>
-      </button>
+  <div class="relative max-w-[1400px] mx-auto px-4 sm:px-6 h-16">
+    <div class="h-full grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
+
+      <div class="flex items-center justify-start min-w-0">
+        <button id="menu-open" type="button" aria-label="Открыть меню брендов"
+                class="inline-flex items-center h-10 pl-3 pr-4 rounded-full text-sm font-semibold text-black hover:bg-gray-100 transition gap-2 shrink-0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="tracking-tight hidden sm:inline">МЕНЮ</span>
+        </button>
+      </div>
+
+      <a href="/" aria-label="На главную"
+         class="flex items-center justify-center select-none min-w-0 transition-all duration-300 ease-in-out"
+         :class="open ? 'md:justify-start md:pr-4' : ''"
+      >
+        <span class="font-sans font-black text-xl tracking-tight text-black whitespace-nowrap truncate">MARKETPLACE</span>
+      </a>
+
+      <div class="flex items-center justify-end min-w-0">
+        <button
+          type="button"
+          aria-label="Открыть поиск"
+          class="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-full text-black hover:bg-gray-100 transition shrink-0"
+          @click="openMobile($nextTick)"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+            <path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <div
+          class="relative transition-all duration-300 ease-in-out hidden md:block"
+          :class="open ? 'w-[42vw] max-w-[58%]' : 'w-[400px]'"
+          @click.outside="if (open && !mobileOpen) closeAll()"
+        >
+          <form
+            action="/search"
+            method="get"
+            @submit.prevent="submitFull()"
+            class="relative"
+          >
+            <div
+              class="relative transition-all duration-300 ease-in-out h-11 overflow-hidden rounded-full"
+              :class="open ? 'h-14 shadow-panel bg-white ring-1 ring-black/10' : 'border border-line bg-white/80 hover:border-gray-300'"
+            >
+              <div class="absolute left-4 top-0 bottom-0 inline-flex items-center justify-center pointer-events-none transition-opacity duration-300 ease-in-out"
+                   :class="open ? 'opacity-100' : 'opacity-0'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-muted">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                  <path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <input
+                name="q"
+                x-model="q"
+                @focus="openDesktop()"
+                @input.debounce.300ms="onInput()"
+                @keydown.enter.prevent="goResult()"
+                @keydown.arrow-down.prevent="if (results.length) { idx = (idx + 1) % results.length; const el = document.getElementById('r_' + idx); if (el) el.scrollIntoView({ block: 'nearest' }); }"
+                @keydown.arrow-up.prevent="if (results.length) { idx = idx <= 0 ? results.length - 1 : idx - 1; const el = document.getElementById('r_' + idx); if (el) el.scrollIntoView({ block: 'nearest' }); }"
+                placeholder="Поиск по бренду, названию, артикулу…"
+                autocomplete="off"
+                spellcheck="false"
+                class="absolute inset-0 bg-transparent w-full h-full rounded-full outline-none border-0 px-5 text-[15px] text-black placeholder:text-muted transition-all duration-300 ease-in-out"
+                :class="open ? 'pl-12 pr-28 sm:pr-32' : 'pr-28'"
+              >
+              <div class="absolute right-1.5 top-1.5 bottom-1.5 inline-flex items-center gap-1 z-10">
+                <span x-show="loading" x-transition.opacity.duration.200ms class="inline-flex items-center justify-center h-9 w-9 rounded-full pointer-events-none" aria-label="Загрузка">
+                  <svg class="animate-spin h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" stroke-width="3"/>
+                    <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                  </svg>
+                </span>
+                <button type="submit" aria-label="Найти"
+                        x-show="!loading"
+                        x-transition.opacity.duration.200ms
+                        class="inline-flex items-center h-9 px-4 rounded-full text-sm font-semibold text-black hover:bg-gray-100 transition gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="hidden sm:inline">
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                    <path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                  Найти
+                </button>
+              </div>
+            </div>
+
+            <div
+              x-show="open && !mobileOpen"
+              x-transition:enter="transition ease-out duration-200"
+              x-transition:enter-start="opacity-0 translate-y-[-6px] scale-[0.99]"
+              x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+              x-transition:leave="transition ease-in duration-150"
+              x-transition:leave-start="opacity-100 translate-y-0"
+              x-transition:leave-end="opacity-0 translate-y-[-4px]"
+              @click.stop
+              class="absolute left-0 right-0 mt-3 rounded-2xl bg-white border border-line shadow-panel overflow-hidden z-[60]"
+              style="transform-origin: top right;"
+            >
+              <div class="max-h-[calc(min(680px,72vh))] overflow-y-auto">
+                <template x-if="q.trim().length >= 3 && results.length === 0 && !loading">
+                  <div class="px-6 py-12 text-center">
+                    <div class="font-sans font-semibold text-lg tracking-tight text-black">Ничего не найдено</div>
+                    <p class="text-muted text-sm mt-2">Попробуйте изменить запрос или сократить количество символов.</p>
+                    <p class="text-muted text-xs mt-3">Помните: поиск понимает опечатки — «Nkie» найдёт «Nike».</p>
+                  </div>
+                </template>
+                <template x-if="q.trim().length < 3">
+                  <div class="px-6 py-8 text-center">
+                    <div class="font-sans font-semibold text-[15px] text-black tracking-tight">Начните вводить</div>
+                    <p class="text-muted text-sm mt-1.5">Первые подсказки появятся после 3 символов.</p>
+                  </div>
+                </template>
+                <template x-if="results.length > 0">
+                  <ul class="py-2 px-2">
+                    <template x-for="(r, i) in results" :key="r.id">
+                      <li
+                        :id="'r_' + i"
+                        role="option"
+                        :aria-selected="idx === i"
+                        class="group/item mb-1 last:mb-0 rounded-xl"
+                        :class="idx === i ? 'bg-gray-100' : ''"
+                      >
+                        <a
+                          :href="r.url || ('/album/' + r.id)"
+                          @mousedown.prevent
+                          @mouseup.prevent="closeAll(); const u = r.url || ('/album/' + r.id); window.location.href = u;"
+                          @mouseenter="idx = i"
+                          class="flex items-center gap-4 p-3 sm:p-2.5 rounded-xl transition cursor-pointer hover:bg-gray-50"
+                        >
+                          <div class="shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-line" style="width: 150px; height: 150px;">
+                            <img
+                              x-bind:src="r.image_id ? ('/media/image/' + r.image_id) : '/static/images/no-image.png'"
+                              :alt="(r.title || '').toString()"
+                              loading="lazy"
+                              class="w-full h-full object-cover"
+                              onerror="this.onerror=null;this.src='/static/images/no-image.png';"
+                            >
+                          </div>
+                          <div class="min-w-0 flex-1 pr-2">
+                            <div class="text-[17px] leading-snug font-semibold tracking-tight text-black line-clamp-3 break-words"
+                                 x-text="(r.title || '').toString()"></div>
+                          </div>
+                          <div class="shrink-0 text-muted" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                          </div>
+                        </a>
+                      </li>
+                    </template>
+                  </ul>
+                </template>
+              </div>
+              <div class="border-t border-line px-3 py-2 flex items-center justify-between gap-3">
+                <div class="text-[11px] text-muted px-2 truncate">
+                  <span x-show="results.length > 0" x-text="'Найдено ' + results.length + ' из 8. Порог схожести ≥ 0.2'"></span>
+                  <span x-show="q.trim().length < 3 || (results.length === 0 && !loading)" x-text="'Поиск по триграммам · pg_trgm · GIN'"></span>
+                </div>
+                <a
+                  :href="allUrl()"
+                  @click.prevent.stop="if (q.trim().length) submitFull()"
+                  class="inline-flex items-center h-9 px-4 rounded-full text-sm font-semibold text-black hover:bg-gray-100 transition gap-1.5"
+                >
+                  Показать все результаты
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
 
-    <a href="/" aria-label="На главную"
-       class="select-none shrink-0 transition-all duration-300 ease-in-out"
-       :class="open ? 'translate-x-0 opacity-100 mr-2' : 'ml-auto mr-auto'"
-       style="order: 2;"
-    >
-      <span class="font-sans font-black text-xl tracking-tight text-black whitespace-nowrap">MARKETPLACE</span>
-    </a>
-
     <div
-      class="relative shrink-0 ml-auto transition-all duration-300 ease-in-out"
-      style="order: 3;"
-      :class="open ? 'flex-[1_1_0%] max-w-[70%] sm:max-w-[62%] md:max-w-[58%]' : 'w-[220px] sm:w-[320px] md:w-[400px]'"
-      @click.outside="if (open) close()"
+      x-show="mobileOpen"
+      x-transition:enter="transition-all duration-300 ease-in-out"
+      x-transition:enter-start="opacity-0 translate-y-1"
+      x-transition:enter-end="opacity-100 translate-y-0"
+      x-transition:leave="transition-all duration-300 ease-in-out"
+      x-transition:leave-start="opacity-100 translate-y-0"
+      x-transition:leave-end="opacity-0 translate-y-1"
+      x-cloak
+      class="absolute inset-0 z-[60] bg-white md:hidden"
     >
-      <form
-        action="/search"
-        method="get"
-        @submit.prevent="submitFull()"
-        class="relative"
-      >
-        <div
-          class="relative transition-all duration-300 ease-in-out h-11 overflow-hidden rounded-full"
-          :class="open ? 'h-14 shadow-panel bg-white ring-1 ring-black/10' : 'border border-line bg-white/80 hover:border-gray-300'"
+      <div class="h-full max-w-[1400px] mx-auto px-4 sm:px-6 flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Отменить поиск"
+          class="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-full text-black hover:bg-gray-100 transition"
+          @click="closeMobile()"
         >
-          <div class="absolute left-4 top-0 bottom-0 inline-flex items-center justify-center pointer-events-none transition-opacity duration-300 ease-in-out"
-               :class="open ? 'opacity-100' : 'opacity-0'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="text-muted">
-              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
-              <path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <input
-            name="q"
-            x-model="q"
-            @focus="onFocus()"
-            @input.debounce.300ms="onInput()"
-            @keydown.enter.prevent="goResult()"
-            @keydown.arrow-down.prevent="if (results.length) { idx = (idx + 1) % results.length; const el = document.getElementById('r_' + idx); if (el) el.scrollIntoView({ block: 'nearest' }); }"
-            @keydown.arrow-up.prevent="if (results.length) { idx = idx <= 0 ? results.length - 1 : idx - 1; const el = document.getElementById('r_' + idx); if (el) el.scrollIntoView({ block: 'nearest' }); }"
-            placeholder="Поиск по бренду, названию, артикулу…"
-            autocomplete="off"
-            spellcheck="false"
-            class="absolute inset-0 bg-transparent w-full h-full rounded-full outline-none border-0 px-5 text-[15px] text-black placeholder:text-muted transition-all duration-300 ease-in-out"
-            :class="open ? 'pl-12 pr-28 sm:pr-32' : 'pr-28'"
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+
+        <form
+          action="/search"
+          method="get"
+          @submit.prevent="submitFull()"
+          class="relative flex-1 min-w-0"
+          @click.outside="if (open) closeMobile()"
+        >
+          <div
+            class="relative transition-all duration-300 ease-in-out h-12 overflow-hidden rounded-full shadow-panel bg-white ring-1 ring-black/10"
           >
-          <div class="absolute right-1.5 top-1.5 bottom-1.5 inline-flex items-center gap-1 z-10">
-            <span x-show="loading" x-transition.opacity.duration.200ms class="inline-flex items-center justify-center h-9 w-9 rounded-full pointer-events-none" aria-label="Загрузка">
-              <svg class="animate-spin h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" stroke-width="3"/>
-                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-              </svg>
-            </span>
-            <button type="submit" aria-label="Найти"
-                    x-show="!loading"
-                    x-transition.opacity.duration.200ms
-                    class="inline-flex items-center h-9 px-4 rounded-full text-sm font-semibold text-black hover:bg-gray-100 transition gap-1.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="hidden sm:inline">
+            <div class="absolute left-4 top-0 bottom-0 inline-flex items-center justify-center pointer-events-none text-muted">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
                 <path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
-              Найти
-            </button>
-          </div>
-        </div>
-
-        <div
-          x-show="open"
-          x-transition:enter="transition ease-out duration-200"
-          x-transition:enter-start="opacity-0 translate-y-[-6px] scale-[0.99]"
-          x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-          x-transition:leave="transition ease-in duration-150"
-          x-transition:leave-start="opacity-100 translate-y-0"
-          x-transition:leave-end="opacity-0 translate-y-[-4px]"
-          @click.stop
-          class="absolute left-0 right-0 mt-3 rounded-2xl bg-white border border-line shadow-panel overflow-hidden z-[60]"
-          style="transform-origin: top right;"
-        >
-          <div class="max-h-[calc(min(680px,72vh))] overflow-y-auto">
-            <template x-if="q.trim().length >= 3 && results.length === 0 && !loading">
-              <div class="px-6 py-12 text-center">
-                <div class="font-sans font-semibold text-lg tracking-tight text-black">Ничего не найдено</div>
-                <p class="text-muted text-sm mt-2">Попробуйте изменить запрос или сократить количество символов.</p>
-                <p class="text-muted text-xs mt-3">Помните: поиск понимает опечатки — «Nkie» найдёт «Nike».</p>
-              </div>
-            </template>
-            <template x-if="q.trim().length < 3">
-              <div class="px-6 py-8 text-center">
-                <div class="font-sans font-semibold text-[15px] text-black tracking-tight">Начните вводить</div>
-                <p class="text-muted text-sm mt-1.5">Первые подсказки появятся после 3 символов.</p>
-              </div>
-            </template>
-            <template x-if="results.length > 0">
-              <ul class="py-2 px-2">
-                <template x-for="(r, i) in results" :key="r.id">
-                  <li
-                    :id="'r_' + i"
-                    role="option"
-                    :aria-selected="idx === i"
-                    class="group/item mb-1 last:mb-0 rounded-xl"
-                    :class="idx === i ? 'bg-gray-100' : ''"
-                  >
-                    <a
-                      :href="r.url || ('/album/' + r.id)"
-                      @mousedown.prevent
-                      @mouseup.prevent="close(); const u = r.url || ('/album/' + r.id); window.location.href = u;"
-                      @mouseenter="idx = i"
-                      class="flex items-center gap-4 p-2.5 rounded-xl transition cursor-pointer hover:bg-gray-50"
-                    >
-                      <div class="shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-line" style="width: 150px; height: 150px;">
-                        <img
-                          x-bind:src="r.image_id ? ('/media/image/' + r.image_id) : '/static/images/no-image.png'"
-                          :alt="(r.title || '').toString()"
-                          loading="lazy"
-                          class="w-full h-full object-cover"
-                          onerror="this.onerror=null;this.src='/static/images/no-image.png';"
-                        >
-                      </div>
-                      <div class="min-w-0 flex-1 pr-2">
-                        <div class="text-[17px] leading-snug font-semibold tracking-tight text-black line-clamp-3"
-                             x-text="(r.title || '').toString()"></div>
-                      </div>
-                      <div class="shrink-0 text-muted" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                      </div>
-                    </a>
-                  </li>
-                </template>
-              </ul>
-            </template>
-          </div>
-          <div class="border-t border-line px-3 py-2 flex items-center justify-between gap-3">
-            <div class="text-[11px] text-muted px-2 truncate">
-              <span x-show="results.length > 0" x-text="'Найдено ' + results.length + ' из 8. Порог схожести ≥ 0.2'"></span>
-              <span x-show="q.trim().length < 3 || (results.length === 0 && !loading)" x-text="'Поиск по триграммам · pg_trgm · GIN'"></span>
             </div>
-            <a
-              :href="allUrl()"
-              @click.prevent.stop="if (q.trim().length) submitFull()"
-              class="inline-flex items-center h-9 px-4 rounded-full text-sm font-semibold text-black hover:bg-gray-100 transition gap-1.5"
+            <input
+              id="mobile-search-input"
+              name="q"
+              x-model="q"
+              @input.debounce.300ms="onInput()"
+              @keydown.enter.prevent="goResult()"
+              @keydown.arrow-down.prevent="if (results.length) { idx = (idx + 1) % results.length; const el = document.getElementById('mr_' + idx); if (el) el.scrollIntoView({ block: 'nearest' }); }"
+              @keydown.arrow-up.prevent="if (results.length) { idx = idx <= 0 ? results.length - 1 : idx - 1; const el = document.getElementById('mr_' + idx); if (el) el.scrollIntoView({ block: 'nearest' }); }"
+              placeholder="Поиск по каталогу…"
+              autocomplete="off"
+              spellcheck="false"
+              class="absolute inset-0 bg-transparent w-full h-full rounded-full outline-none border-0 pl-12 pr-12 text-[15px] text-black placeholder:text-muted"
             >
-              Показать все результаты
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </a>
+            <div class="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 z-10">
+              <span x-show="loading" x-transition.opacity.duration.200ms class="inline-flex items-center justify-center h-9 w-9 rounded-full pointer-events-none" aria-label="Загрузка">
+                <svg class="animate-spin h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" stroke-width="3"/>
+                  <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <button
+                type="submit"
+                aria-label="Найти"
+                x-show="!loading && q.trim().length"
+                x-transition.opacity.duration.200ms
+                class="inline-flex items-center justify-center h-9 w-9 rounded-full text-black hover:bg-gray-100 transition"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+
+          <div
+            x-show="open"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-[-4px]"
+            x-transition:enter-end="opacity-100 translate-y-0"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0"
+            x-transition:leave-end="opacity-0 translate-y-[-4px]"
+            @click.stop
+            class="fixed left-0 right-0 mt-3 bg-white border-b border-line shadow-panel overflow-hidden z-[80]"
+            style="top: 4rem;"
+          >
+            <div class="max-h-[calc(min(80vh,680px))] overflow-y-auto">
+              <template x-if="q.trim().length >= 3 && results.length === 0 && !loading">
+                <div class="px-6 py-12 text-center">
+                  <div class="font-sans font-semibold text-lg tracking-tight text-black">Ничего не найдено</div>
+                  <p class="text-muted text-sm mt-2">Попробуйте изменить запрос или сократить количество символов.</p>
+                  <p class="text-muted text-xs mt-3">Помните: поиск понимает опечатки — «Nkie» найдёт «Nike».</p>
+                </div>
+              </template>
+              <template x-if="q.trim().length < 3">
+                <div class="px-6 py-8 text-center">
+                  <div class="font-sans font-semibold text-[15px] text-black tracking-tight">Начните вводить</div>
+                  <p class="text-muted text-sm mt-1.5">Первые подсказки появятся после 3 символов.</p>
+                </div>
+              </template>
+              <template x-if="results.length > 0">
+                <ul class="py-2 px-2 sm:px-3">
+                  <template x-for="(r, i) in results" :key="'m_' + r.id">
+                    <li
+                      :id="'mr_' + i"
+                      role="option"
+                      :aria-selected="idx === i"
+                      class="group/item mb-1 last:mb-0 rounded-xl"
+                      :class="idx === i ? 'bg-gray-100' : ''"
+                    >
+                      <a
+                        :href="r.url || ('/album/' + r.id)"
+                        @mousedown.prevent
+                        @mouseup.prevent="closeMobile(); const u = r.url || ('/album/' + r.id); window.location.href = u;"
+                        @touchstart.prevent="idx = i"
+                        class="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl transition cursor-pointer hover:bg-gray-50 active:bg-gray-100"
+                      >
+                        <div class="shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-line" style="width: 150px; height: 150px;">
+                          <img
+                            x-bind:src="r.image_id ? ('/media/image/' + r.image_id) : '/static/images/no-image.png'"
+                            :alt="(r.title || '').toString()"
+                            loading="lazy"
+                            class="w-full h-full object-cover"
+                            onerror="this.onerror=null;this.src='/static/images/no-image.png';"
+                          >
+                        </div>
+                        <div class="min-w-0 flex-1 pr-1">
+                          <div class="text-[17px] leading-snug font-semibold tracking-tight text-black line-clamp-3 break-words"
+                               x-text="(r.title || '').toString()"></div>
+                        </div>
+                        <div class="shrink-0 text-muted hidden sm:block" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                        </div>
+                      </a>
+                    </li>
+                  </template>
+                </ul>
+              </template>
+            </div>
+            <div class="border-t border-line px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+              <div class="text-[11px] text-muted truncate flex-1">
+                <span x-show="results.length > 0" x-text="'Найдено ' + results.length + ' из 8'"></span>
+                <span x-show="q.trim().length < 3 || (results.length === 0 && !loading)" x-text="'Поиск по триграммам · pg_trgm'"></span>
+              </div>
+              <a
+                :href="allUrl()"
+                @click.prevent.stop="if (q.trim().length) submitFull()"
+                class="shrink-0 inline-flex items-center h-9 px-3 sm:px-4 rounded-full text-sm font-semibold text-black bg-gray-100 hover:bg-gray-200 transition gap-1.5"
+              >
+                Все
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </header>
@@ -373,38 +585,16 @@
   </div>
 </div>
 
-<main class="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 sm:py-10">
+<main class="max-w-[1400px] mx-auto px-4 sm:px-6 pt-2 md:pt-6 pb-6 md:pb-10">
   {% block content %}{% endblock %}
 </main>
 
-<footer class="mt-14 border-t border-line bg-white/50">
-  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 text-[12px] text-muted flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+<footer class="mt-8 md:mt-14 border-t border-line bg-white/50">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 md:py-8 text-[12px] text-muted flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
     <div>© <span id="y"></span> MARKETPLACE — Каталог уличного стиля</div>
     <div>Работает на Telegram CDN · Поиск по триграммам</div>
   </div>
 </footer>
-
-<button
-  x-data='{ show: false, _onScroll() { const y = window.scrollY || document.documentElement.scrollTop || 0; this.show = y > 1000; }, _scrollToTop() { if (window.CSS && CSS.supports("scroll-behavior", "smooth")) { window.scrollTo({ top: 0, left: 0, behavior: "smooth" }); } else { window.scrollTo(0, 0); } } }'
-  x-init="window.addEventListener('scroll', _onScroll, { passive: true }); _onScroll();"
-  x-show="show"
-  x-transition:enter="transition-all duration-300 ease-out"
-  x-transition:enter-start="opacity-0 translate-y-2 scale-95"
-  x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-  x-transition:leave="transition-all duration-300 ease-in"
-  x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-  x-transition:leave-end="opacity-0 translate-y-2 scale-95"
-  @click="_scrollToTop()"
-  type="button"
-  aria-label="Наверх"
-  title="Наверх"
-  class="fixed bottom-8 right-8 z-[70] h-12 w-12 inline-flex items-center justify-center rounded-full bg-black text-white shadow-panel hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-black/30 transition-all duration-300"
->
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M12 19V5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    <path d="M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-</button>
 
 <script>
   (function () {

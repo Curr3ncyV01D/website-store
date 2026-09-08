@@ -24,8 +24,7 @@
 {% endblock %}
 
 {% block content %}
-<!-- Навигация (Breadcrumbs) -->
-<nav class="mb-6 flex items-center gap-2 text-sm text-muted" aria-label="Хлебные крошки">
+<nav class="mb-3 md:mb-6 flex items-center gap-1.5 md:gap-2 text-[10px] md:text-xs text-muted" aria-label="Хлебные крошки">
   {% for crumb in breadcrumbs %}
     {% if not loop.last %}
       <a href="{{ crumb.url }}" class="hover:text-ink transition">{{ crumb.name|e }}</a>
@@ -36,16 +35,14 @@
   {% endfor %}
 </nav>
 
-<!-- Заголовок и Действие -->
-<header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+<header class="mb-5 md:mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
   <div>
-    <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-ink">
+    <h1 class="text-xl md:text-2xl md:text-3xl font-bold tracking-tight text-ink leading-[1.15]">
       {{ title|e }}
-      <span class="ml-2 text-sm font-normal text-muted">{{ images|length }} фото</span>
+      <span class="ml-1.5 md:ml-2 text-[11px] md:text-sm font-normal text-muted">{{ images|length }} фото</span>
     </h1>
   </div>
   
-  <!-- Кнопка для десктопа -->
   <a href="{{ telegram_order_url }}" target="_blank"
      class="hidden md:flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-medium hover:bg-zinc-800 transition-all active:scale-95">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -55,8 +52,7 @@
   </a>
 </header>
 
-<!-- Сетка галереи -->
-<div id="album-gallery" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-3">
+<div id="album-gallery" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5 md:gap-2 md:gap-3">
   {% for image_id in images %}
     <a href="/media/image/{{ image_id }}" 
        class="pswp-link group relative block aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-zoom-in transition-all hover:ring-2 hover:ring-black hover:ring-offset-2"
@@ -70,20 +66,18 @@
            class="w-full h-full object-cover aspect-square lazy-fade transition-transform duration-500 ease-in-out group-hover:scale-110"
            onload="updatePswpAttributes(this); this.classList.add('is-loaded');">
       
-      <!-- Overlay при наведении -->
       <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
     </a>
   {% else %}
-    <div class="col-span-full py-20 text-center border-2 border-dashed border-gray-200 rounded-2xl">
+    <div class="col-span-full py-12 md:py-20 text-center border-2 border-dashed border-gray-200 rounded-2xl">
       <p class="text-muted">В этом альбоме пока нет фотографий.</p>
     </div>
   {% endfor %}
 </div>
 
-<!-- Sticky-кнопка для мобилок -->
-<div class="md:hidden fixed inset-x-0 bottom-0 p-4 bg-white/80 backdrop-blur-lg border-t border-line z-50">
+<div class="md:hidden fixed inset-x-0 bottom-0 p-3 md:p-4 bg-white/80 backdrop-blur-lg border-t border-line z-50">
   <a href="{{ telegram_order_url }}" target="_blank"
-     class="flex items-center justify-center gap-2 bg-black text-white w-full py-4 rounded-2xl font-bold transition-all active:scale-95">
+     class="flex items-center justify-center gap-2 bg-black text-white w-full py-3.5 md:py-4 rounded-2xl font-bold transition-all active:scale-95">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
     </svg>

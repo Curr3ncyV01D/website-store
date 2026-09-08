@@ -26,7 +26,7 @@ from urllib.parse import quote as urlquote
 
 load_dotenv()
 
-from src.core.config import get_crawl_keywords, settings
+from src.core.config import get_crawl_keywords, get_recommended_brands, settings
 from src.db.models import Image
 from src.db.queries import (
     DEFAULT_PER_PAGE,
@@ -216,9 +216,23 @@ async def api_menu_json(session: AsyncSession = Depends(get_db_session)) -> JSON
 
 
 def _top_keyword_brands() -> list[str]:
+    """
+    Рекомендуемые бренды для витрины главной страницы.
+    Приоритет:
+      1. settings.RECOMMENDED_BRANDS (новая конфигурация через .env).
+      2. CRAWL_KEYWORDS (fallback).
+      3. Встроенный дефолтный список из 6 брендов.
+    Не возвращает технические токены вида "SHOES".
+    """
+    explicit = get_recommended_brands()
+    cleaned_primary = [w for w in explicit if w and w not in {"SHOES"}]
+    if cleaned_primary:
+        return cleaned_primary[:8]
     words = get_crawl_keywords()
-    wanted = [w for w in words if w and w not in {"SHOES"}]
-    return wanted[:8] or ["ADIDAS", "NIKE", "JORDAN", "ARCTERYX", "BALENCIAGA", "RALPH LAUREN"]
+    cleaned_fallback = [w for w in words if w and w not in {"SHOES"}]
+    if cleaned_fallback:
+        return cleaned_fallback[:8]
+    return ["NIKE", "ADIDAS", "JORDAN", "ARCTERYX", "BALENCIAGA", "STONE ISLAND"]
 
 
 async def _pick_brand_category_ids(
@@ -228,8 +242,19 @@ async def _pick_brand_category_ids(
     limit_per_brand: int = 1,
 ) -> list[tuple[str, int, str]]:
     """
-    Для каждого бренд-имени подбираем category.id из категорий (подкатегорий)
-    по case-insensitive match. Возвращает [(name, category_id, category_name)].
+    Для каждого бренд-имени подбираем category.id из категорий (любого уровня)
+    по case-insensitive match через ILIKE.
+
+    Правило выбора:
+      * Сначала сортируем по убыванию album_count (категория с большим числом
+        альбомов приоритетнее — не показываем пустые «родители» если есть
+        насыщенный подкатегория).
+      * Затем по имени ASC для детерминизма.
+      * Дедупликация по category_id — одна категория = одна «пилюля».
+
+    Возвращает [(brand_keyword_lookup, category_id, pretty_display_name)].
+    В `pretty_display_name` — очищенное имя категории из БД (в верхнем регистре
+    как в Streetwear маркетплейсе, с сохранением пробелов).
     """
     from src.db.models import Category
 
@@ -239,18 +264,28 @@ async def _pick_brand_category_ids(
         for brand in brand_names:
             name_like = f"%{brand}%"
             stmt = (
-                select(Category.id, Category.name)
-                .where(Category.parent_id.is_not(None))
-                .where(func.lower(Category.name).like(func.lower(name_like)))
-                .order_by(Category.name.asc(), Category.id.asc())
+                select(Category.id, Category.name, Category.album_count)
+                .where(Category.name.ilike(name_like))
+                .order_by(
+                    (Category.album_count.desc()),
+                    Category.name.asc(),
+                    Category.id.asc(),
+                )
                 .limit(limit_per_brand)
             )
             rows = (await session.execute(stmt)).all()
-            for cid, cname in rows:
+            for row in rows:
+                cid = int(row[0])
+                raw_name = row[1]
                 if cid in seen_ids:
                     continue
-                seen_ids.add(int(cid))
-                out.append((brand, int(cid), str(cname or brand)))
+                seen_ids.add(cid)
+                pretty = (str(raw_name or brand)).strip()
+                if pretty:
+                    pretty_upper = pretty.upper()
+                else:
+                    pretty_upper = str(brand or "").upper()
+                out.append((str(brand or "").upper(), cid, pretty_upper))
                 break
     except Exception as e:
         logger.debug(f"[web.router._pick_brand_category_ids] partial fail: {type(e).__name__}")
@@ -304,18 +339,24 @@ async def homepage(
     return tpl.TemplateResponse("index.html", context)
 
 
+_INFINITE_SCROLL_PER_PAGE: int = 36
+
+
 @router.get("/partial/albums", response_class=HTMLResponse, tags=["partial"])
 async def partial_albums_grid(
     request: Request,
     page: int = Query(default=1, ge=1, le=100000),
-    per_page: int = Query(default=DEFAULT_PER_PAGE, ge=12, le=96),
     category_id: Optional[int] = Query(default=None, ge=1, le=10**9),
     session: AsyncSession = Depends(get_db_session),
 ):
     """
     HTMX-fragment: только HTML сетки карточек + sentinel hx-trigger=revealed следующей страницы.
     Без layout/base, без хедера/футера.
+
+    Размер порции фиксирован (_INFINITE_SCROLL_PER_PAGE), чтобы первая страница и
+    все последующие подгрузки через Infinite Scroll были согласованы.
     """
+    per_page: int = _INFINITE_SCROLL_PER_PAGE
     tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
     pagination: Optional[PaginatedAlbums] = None
     try:
@@ -359,11 +400,11 @@ async def category_page(
     request: Request,
     category_id: int = FastAPIPath(..., ge=1),
     page: int = Query(default=1, ge=1, le=10000),
-    per_page: int = Query(default=DEFAULT_PER_PAGE, ge=12, le=96),
     session: AsyncSession = Depends(get_db_session),
 ):
     tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
 
+    per_page: int = _INFINITE_SCROLL_PER_PAGE
     category = None
     breadcrumbs: list = []
     pagination = None
@@ -392,26 +433,13 @@ async def category_page(
             total_pages=1, has_prev=False, has_next=False, prev_url=None, next_url=None,
         )
 
-    def _page_url(p: int) -> str:
-        from urllib.parse import urlencode
-        qp = urlencode({"page": int(p), "per_page": int(per_page)})
-        return f"/category/{int(category_id)}?{qp}"
-
-    try:
-        pagination.prev_url = _page_url(pagination.page - 1) if pagination.has_prev else None
-        pagination.next_url = _page_url(pagination.page + 1) if pagination.has_next else None
-    except Exception:
-        pass
-
     context = {
         "request": request,
         "category": category,
         "breadcrumbs": breadcrumbs,
         "pagination": pagination,
         "page": pagination.page,
-        "per_page": pagination.per_page,
         "total": pagination.total,
-        "total_pages": pagination.total_pages,
         "albums": pagination.items,
         "count": len(pagination.items),
     }

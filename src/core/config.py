@@ -11,7 +11,7 @@ if PROJECT_ROOT not in sys.path:
 # Clean any stale empty CRAWL_KEYWORDS env vars set by the process (e.g., Travis/CI shells that
 # export it as "=") BEFORE pydantic-settings reads them, so pydantic-settings doesn't try to
 # JSON-decode a non-JSON string for list fields.
-for _envkey in ("CRAWL_KEYWORDS",):
+for _envkey in ("CRAWL_KEYWORDS", "RECOMMENDED_BRANDS"):
     _val = os.environ.get(_envkey)
     if _val is not None and str(_val).strip() == "":
         os.environ.pop(_envkey)
@@ -62,10 +62,14 @@ class Settings(BaseSettings):
     # The field_validator below converts the string (or list/tuple default override) into list[str].
     CRAWL_KEYWORDS: Any = ""
 
+    # NOTE: same treatment as CRAWL_KEYWORDS. Raw CSV string in .env, validator turns into list[str] (UPPER).
+    # Example env: RECOMMENDED_BRANDS=NIKE,ADIDAS,JORDAN,ARCTERYX,BALENCIAGA,STONE ISLAND
+    RECOMMENDED_BRANDS: Any = ""
+
     MANAGER_USERNAME: str = "ManagerSem"
     TELEGRAM_ORDER_MESSAGE: str = 'Здравствуйте! Хочу заказать этот товар: "{title}". Ссылка: {url}'
 
-    @field_validator("CRAWL_KEYWORDS", mode="before")
+    @field_validator("CRAWL_KEYWORDS", "RECOMMENDED_BRANDS", mode="before")
     @classmethod
     def _to_csv_list(cls, v: Any) -> Any:
         return _parse_keywords_csv(v)
@@ -76,6 +80,13 @@ settings = Settings()
 
 def get_crawl_keywords() -> list[str]:
     value = settings.CRAWL_KEYWORDS
+    if isinstance(value, list):
+        return list(value)
+    return _parse_keywords_csv(value)
+
+
+def get_recommended_brands() -> list[str]:
+    value = settings.RECOMMENDED_BRANDS
     if isinstance(value, list):
         return list(value)
     return _parse_keywords_csv(value)

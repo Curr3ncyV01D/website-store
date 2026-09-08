@@ -387,7 +387,7 @@ async def get_category_path(session: AsyncSession, category_id: int) -> list[Bre
     except Exception as e:
         logger.exception(f"[db.queries.get_category_path] failed for id={category_id}: {type(e).__name__}")
         return []
-    return [BreadcrumbItem(id=None, name="Home", url="/")] + path
+    return [BreadcrumbItem(id=None, name="Главная", url="/")] + path
 
 
 async def get_category_albums_paginated(
