@@ -71,7 +71,8 @@ def clean_album_title(title: str) -> str:
     working = _SIZE_RANGE_PATTERN.sub(" ", working)
     working = _SINGLE_SIZE_PATTERN.sub(" ", working)
 
-    working = _apply_patterns(working, _CONTACT_PATTERNS)
+    # Отключено за ненадобностью пока что
+    # working = _apply_patterns(working, _CONTACT_PATTERNS)
 
     working = _ALLOWED_CHARS_PATTERN.sub(" ", working)
 
