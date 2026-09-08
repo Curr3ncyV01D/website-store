@@ -1,21 +1,83 @@
 services:
+  # =========================================
+  # 1. POSTGRES DATABASE (основная БД)
+  # =========================================
   db:
     image: postgres:15-alpine
     container_name: yupoo_db
     restart: always
+    shm_size: 128mb
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: yupoo_db
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-yupoo_db}
     ports:
-      - "5433:5432"
+      - "5433:5432"   # host:container — снаружи сервера доступен на 5433 (если нужно админом)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-yupoo_db}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+
+  # =========================================
+  # 2. WEB-ИНТЕРФЕЙС (FastAPI + Jinja2)
+  #    Публичный порт 80 -> внутренний 8000
+  # =========================================
+  web:
+    build: .
+    container_name: yupoo_web
+    restart: always
+    tty: true
+    # Автозапуск миграций Alembic при старте (если есть Alembic в проекте):
+    # command: >
+    #   bash -c "
+    #   alembic upgrade head || true ;
+    #   uvicorn src.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    #   "
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    ports:
+      - "80:8000"
+    env_file:
+      # порядок важен: общие из .env, затем переопределения из .env.prod (если файл есть)
+      # ВНИМАНИЕ: для запуска на сервере скопируй .env.prod в .env
+      - .env
+    volumes:
+      # Persistent storage: кэш картинок Telegram CDN (не пропадает при docker compose down)
+      - ./data:/app/data
+      # Статика (PhotoSwipe v5, no-image placeholder)
+      - ./static:/app/static
+      # Шаблоны (если захочешь править html без пересборки образа)
+      - ./templates:/app/templates
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # =========================================
+  # 3. BACKGROUND WORKER (Telegram CDN → DB)
+  #    Скачивает альбомы, кэширует картинки, пишет в БД
+  # =========================================
+  worker:
+    build: .
+    container_name: yupoo_worker
+    restart: always
+    tty: true
+    command: python scripts/run_worker.py --interval 1.5
+    env_file:
+      - .env
+    volumes:
+      # Разделяем с web ОДИН И ТОТ ЖЕ кэш: что скачал worker, сразу отдаёт web
+      - ./data:/app/data
+      # Статика (no-image fallback) тоже доступна worker'у
+      - ./static:/app/static
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
 
 volumes:
   postgres_data:
+    driver: local
