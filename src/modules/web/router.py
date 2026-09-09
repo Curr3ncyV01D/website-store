@@ -215,13 +215,13 @@ async def api_menu_json(session: AsyncSession = Depends(get_db_session)) -> JSON
     return JSONResponse(content=jsonable_encoder(payload))
 
 
-def _top_keyword_brands() -> list[str]:
+def _top_keyword_brands() -> list[str] | None:
     """
     Рекомендуемые бренды для витрины главной страницы.
     Приоритет:
       1. settings.RECOMMENDED_BRANDS (новая конфигурация через .env).
       2. CRAWL_KEYWORDS (fallback).
-      3. Встроенный дефолтный список из 6 брендов.
+      3. Ничего (None) — блок «Популярные бренды» не рендерится.
     Не возвращает технические токены вида "SHOES".
     """
     explicit = get_recommended_brands()
@@ -232,12 +232,12 @@ def _top_keyword_brands() -> list[str]:
     cleaned_fallback = [w for w in words if w and w not in {"SHOES"}]
     if cleaned_fallback:
         return cleaned_fallback[:8]
-    return ["NIKE", "ADIDAS", "JORDAN", "ARCTERYX", "BALENCIAGA", "STONE ISLAND"]
+    return None
 
 
 async def _pick_brand_category_ids(
     session: AsyncSession,
-    brand_names: list[str],
+    brand_names: list[str] | None,
     *,
     limit_per_brand: int = 1,
 ) -> list[tuple[str, int, str]]:
@@ -259,6 +259,8 @@ async def _pick_brand_category_ids(
     from src.db.models import Category
 
     out: list[tuple[str, int, str]] = []
+    if not brand_names:
+        return out
     seen_ids: set[int] = set()
     try:
         for brand in brand_names:
@@ -276,10 +278,7 @@ async def _pick_brand_category_ids(
                     continue
                 seen_ids.add(cid)
                 pretty = (str(raw_name or brand)).strip()
-                if pretty:
-                    pretty_upper = pretty.upper()
-                else:
-                    pretty_upper = str(brand or "").upper()
+                pretty_upper = pretty.upper() if pretty else str(brand or "").upper()
                 out.append((str(brand or "").upper(), cid, pretty_upper))
                 break
     except Exception as e:
