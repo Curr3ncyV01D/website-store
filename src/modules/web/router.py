@@ -26,7 +26,7 @@ from urllib.parse import quote as urlquote
 
 load_dotenv()
 
-from src.core.config import get_crawl_keywords, get_recommended_brands, settings
+from src.core.config import get_recommended_brands, settings
 from src.db.models import Image
 from src.db.queries import (
     DEFAULT_PER_PAGE,
@@ -218,20 +218,18 @@ async def api_menu_json(session: AsyncSession = Depends(get_db_session)) -> JSON
 def _top_keyword_brands() -> list[str] | None:
     """
     Рекомендуемые бренды для витрины главной страницы.
-    Приоритет:
-      1. settings.RECOMMENDED_BRANDS (новая конфигурация через .env).
-      2. CRAWL_KEYWORDS (fallback).
-      3. Ничего (None) — блок «Популярные бренды» не рендерится.
-    Не возвращает технические токены вида "SHOES".
+
+    Источник ТОЛЬКО settings.RECOMMENDED_BRANDS (конфигурация через .env).
+    НЕ используем CRAWL_KEYWORDS как fallback (они технические, для crawler).
+
+    Возвращает:
+      - list[str] UPPERCASE (до 8 брендов) — если в .env явно задан список;
+      - None — в остальных случаях (блок «Популярные бренды» на главной скрывается).
     """
     explicit = get_recommended_brands()
     cleaned_primary = [w for w in explicit if w and w not in {"SHOES"}]
     if cleaned_primary:
         return cleaned_primary[:8]
-    words = get_crawl_keywords()
-    cleaned_fallback = [w for w in words if w and w not in {"SHOES"}]
-    if cleaned_fallback:
-        return cleaned_fallback[:8]
     return None
 
 
