@@ -264,13 +264,8 @@ async def _pick_brand_category_ids(
         for brand in brand_names:
             name_like = f"%{brand}%"
             stmt = (
-                select(Category.id, Category.name, Category.album_count)
+                select(Category.id, Category.name)
                 .where(Category.name.ilike(name_like))
-                .order_by(
-                    (Category.album_count.desc()),
-                    Category.name.asc(),
-                    Category.id.asc(),
-                )
                 .limit(limit_per_brand)
             )
             rows = (await session.execute(stmt)).all()

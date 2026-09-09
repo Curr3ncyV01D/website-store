@@ -4,7 +4,7 @@
 
 {% block content %}
 <section class="mb-3 md:mb-6 sm:mb-8">
-  <nav class="flex items-center gap-1.5 md:gap-2 text-[10px] md:text-xs text-muted" aria-label="Хлебные крошки">
+  <nav class="flex items-center gap-1.5 md:gap-2 text-[10px] md:text-base text-muted" aria-label="Хлебные крошки">
     {% for crumb in breadcrumbs %}
       {% if not loop.last %}
         <a href="{{ crumb.url }}" class="hover:text-black transition">{{ crumb.name|e }}</a>

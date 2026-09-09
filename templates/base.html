@@ -91,7 +91,20 @@
     searchLocked: false,
     _searchOpen: false,
     _isMobile() { return window.innerWidth < 768; },
-    _updateLock() { this.searchLocked = this._isMobile() && this._searchOpen; }
+    _updateLock() { 
+      this.searchLocked = this._isMobile() && this._searchOpen; 
+      if (this.searchLocked) {
+        document.body.style.top = `-${window.scrollY}px`;
+        document.body.style.position = "fixed";
+        document.body.style.width = "100%";
+      } else {
+        const scrollY = document.body.style.top;
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        window.scrollTo(0, parseInt(scrollY || "0") * -1);
+      }
+    }
   }'
   @search-open.window="_searchOpen = true; _updateLock()"
   @search-close.window="_searchOpen = false; _updateLock()"
@@ -210,10 +223,10 @@
       </div>
 
       <a href="/" aria-label="На главную"
-         class="flex items-center justify-center select-none min-w-0 transition-all duration-300 ease-in-out"
-         :class="open ? 'md:justify-start md:pr-4' : ''"
+        class="absolute left-1/2 -translate-x-1/2 select-none transition-all duration-300 ease-in-out z-0"
+        :class="open ? 'md:-translate-x-[400px]' : '-translate-x-1/2'"
       >
-        <span class="font-sans font-black text-xl tracking-tight text-black whitespace-nowrap truncate">MARKETPLACE</span>
+        <span class="font-sans font-black text-[40px] tracking-tight text-black whitespace-nowrap">semsneak</span>
       </a>
 
       <div class="flex items-center justify-end min-w-0">
@@ -231,7 +244,7 @@
 
         <div
           class="relative transition-all duration-300 ease-in-out hidden md:block"
-          :class="open ? 'w-[42vw] max-w-[58%]' : 'w-[400px]'"
+          :class="open ? 'w-[42vw] max-w-[130%]' : 'w-[500px]'"
           @click.outside="if (open && !mobileOpen) closeAll()"
         >
           <form
@@ -302,7 +315,7 @@
                   <div class="px-6 py-12 text-center">
                     <div class="font-sans font-semibold text-lg tracking-tight text-black">Ничего не найдено</div>
                     <p class="text-muted text-sm mt-2">Попробуйте изменить запрос или сократить количество символов.</p>
-                    <p class="text-muted text-xs mt-3">Помните: поиск понимает опечатки — «Nkie» найдёт «Nike».</p>
+                    <p class="text-muted text-xs mt-3">Поиск понимает опечатки — «Nkie» найдёт «Nike».</p>
                   </div>
                 </template>
                 <template x-if="q.trim().length < 3">
@@ -456,7 +469,7 @@
             x-transition:leave-start="opacity-100 translate-y-0"
             x-transition:leave-end="opacity-0 translate-y-[-4px]"
             @click.stop
-            class="fixed left-0 right-0 mt-3 bg-white border-b border-line shadow-panel overflow-hidden z-[80]"
+            class="fixed left-0 right-0 bg-white border-b border-line shadow-panel overflow-hidden z-[80]"
             style="top: 4rem;"
           >
             <div class="max-h-[calc(min(80vh,680px))] overflow-y-auto">
