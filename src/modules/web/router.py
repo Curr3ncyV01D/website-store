@@ -35,14 +35,15 @@ from src.db.queries import (
     SUGGEST_DEFAULT_LIMIT,
     SUGGEST_DEFAULT_THRESHOLD,
     AlbumDetail,
+    CategoryMenuRow,
     PaginatedAlbums,
     get_album_detail,
+    get_all_categories_with_counts,
     get_category_albums_paginated,
     get_category_by_id,
     get_category_path,
     get_latest_albums,
     get_latest_albums_paginated,
-    get_root_categories_with_children,
     search_albums,
     search_albums_suggest,
 )
@@ -194,23 +195,16 @@ async def favicon():
 
 @router.get("/api/menu.json", tags=["api", "menu"])
 async def api_menu_json(session: AsyncSession = Depends(get_db_session)) -> JSONResponse:
-    branches = await get_root_categories_with_children(session)
+    rows = await get_all_categories_with_counts(session)
     payload = [
         {
-            "id": b.id,
-            "name": b.name,
-            "children": [
-                {
-                    "id": c.id,
-                    "name": c.name,
-                    "first_letter": c.first_letter,
-                    "album_count": c.album_count,
-                    "url": f"/category/{c.id}",
-                }
-                for c in b.children
-            ],
+            "id": r.id,
+            "name": r.name,
+            "album_count": r.album_count,
+            "first_letter": r.first_letter,
+            "url": r.url,
         }
-        for b in branches
+        for r in rows
     ]
     return JSONResponse(content=jsonable_encoder(payload))
 

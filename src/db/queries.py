@@ -329,7 +329,7 @@ async def get_root_categories_with_children(
                 isouter=True,
             )
             .where(Category.parent_id.is_not(None))
-            .group_by(Category.id, Category.name, Category.yupoo_path, Category.parent_id)
+            .group_by(Category.id)
         )
         sub_rows = (await session.execute(sub_stmt)).all()
 
@@ -645,3 +645,59 @@ async def get_category_by_id(session: AsyncSession, category_id: int) -> Optiona
     except Exception as e:
         logger.exception(f"[db.queries.get_category_by_id] failed id={category_id}: {type(e).__name__}")
         return None
+
+
+@dataclass
+class CategoryMenuRow:
+    id: int
+    name: str
+    first_letter: str
+    album_count: int
+    url: str
+
+
+async def get_all_categories_with_counts(
+    session: AsyncSession,
+) -> list[CategoryMenuRow]:
+    """
+    Плоский список ВСЕХ категорий с реальным подсчётом альбомов.
+    LEFT JOIN с album_category_association, группировка по Category.id.
+    Каждая строка DTO уже содержит вычисленный first_letter и url.
+    """
+    out: list[CategoryMenuRow] = []
+    try:
+        stmt = (
+            select(
+                Category.id,
+                Category.name,
+                func.count(album_category_association.c.album_id).label("album_count"),
+            )
+            .select_from(Category)
+            .join(
+                album_category_association,
+                album_category_association.c.category_id == Category.id,
+                isouter=True,
+            )
+            .group_by(Category.id)
+            .order_by(Category.name.asc(), Category.id.asc())
+        )
+        rows = (await session.execute(stmt)).all()
+        for cid, cname, cnt in rows:
+            name = str(cname or "").strip()
+            out.append(
+                CategoryMenuRow(
+                    id=int(cid),
+                    name=name,
+                    first_letter=_first_letter(name),
+                    album_count=int(cnt or 0),
+                    url=f"/category/{int(cid)}",
+                )
+            )
+        logger.info(
+            f"[db.queries.get_all_categories_with_counts] total={len(out)} categories"
+        )
+    except Exception as e:
+        logger.exception(
+            f"[db.queries.get_all_categories_with_counts] failed -> empty: {type(e).__name__}"
+        )
+    return out

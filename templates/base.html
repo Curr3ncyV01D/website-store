@@ -568,7 +568,7 @@
      aria-hidden="true" role="dialog" aria-modal="true" aria-label="Меню брендов">
   <div class="absolute inset-0 flex items-stretch justify-start">
     <div id="menu-panel"
-         class="w-full max-w-[480px] sm:max-w-[580px] h-full bg-surface shadow-2xl -translate-x-full transition-transform duration-200 flex flex-col">
+         class="w-full max-w-[540px] sm:max-w-[680px] md:max-w-[1000px] h-full bg-surface shadow-2xl -translate-x-full transition-transform duration-200 flex flex-col">
       <div class="flex items-center justify-between border-b border-line px-6 py-5">
         <div>
           <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Навигация</div>
@@ -582,16 +582,45 @@
         </button>
       </div>
 
+      <div class="border-b border-line px-6 py-4">
+        <div id="menu-search-wrap" class="relative flex items-center w-full">
+          <span class="absolute left-3.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-4 h-4 text-muted pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+              <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <input id="menu-search" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                 placeholder="Поиск бренда…"
+                 class="w-full h-11 pl-10 pr-10 rounded-xl bg-bg border border-line focus:border-black/40 focus:bg-surface outline-none transition text-sm placeholder:text-muted/80"
+          />
+          <button id="menu-search-clear" type="button" aria-label="Очистить поиск"
+                  class="hidden absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-surface text-muted hover:text-black transition text-lg leading-none select-none"
+                  tabindex="-1">&times;</button>
+        </div>
+      </div>
+
       <div class="flex-1 overflow-y-auto">
         <div id="menu-loading" class="px-6 py-20 text-center text-muted text-sm">Загружаем бренды…</div>
         <div id="menu-content" class="hidden"></div>
         <div id="menu-empty" class="hidden px-6 py-20 text-center text-muted text-sm">
           Категории не найдены. Запустите crawler и discovery.
         </div>
+        <div id="menu-notfound" class="hidden px-6 py-20 text-center">
+          <div class="inline-flex flex-col items-center gap-2.5">
+            <div class="w-10 h-10 rounded-full bg-bg border border-line inline-flex items-center justify-center text-muted">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div id="menu-notfound-text" class="text-sm text-muted leading-[1.25] max-w-[20rem]"></div>
+          </div>
+        </div>
       </div>
 
       <div class="border-t border-line px-6 py-3 text-[11px] text-muted flex items-center justify-between gap-4">
-        <span>Бренды сгруппированы по первой букве для быстрого скролла.</span>
+        <span>Бренды сгруппированы по первому символу для быстрой навигации.</span>
         <span id="menu-stats" class="font-mono tabular-nums whitespace-nowrap"></span>
       </div>
     </div>
@@ -620,7 +649,11 @@
     const loading = document.getElementById('menu-loading');
     const contentEl = document.getElementById('menu-content');
     const emptyEl = document.getElementById('menu-empty');
+    const notfoundEl = document.getElementById('menu-notfound');
+    const notfoundText = document.getElementById('menu-notfound-text');
     const statsEl = document.getElementById('menu-stats');
+    const searchInput = document.getElementById('menu-search');
+    const searchClearBtn = document.getElementById('menu-search-clear');
     let loaded = false;
 
     function openMenu() {
@@ -649,6 +682,66 @@
       if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeMenu();
     });
 
+    function _esHtml(s) {
+      return String(s == null ? '' : s)
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    }
+
+    function filterMenu(query) {
+      const q = (query || '').trim().toLowerCase();
+      const rows = contentEl.querySelectorAll('[data-letter-row]');
+      let visibleBrands = 0;
+      let totalBrands = 0;
+      rows.forEach(row => {
+        const links = row.querySelectorAll('[data-brand-name]');
+        let hasVisible = false;
+        links.forEach(a => {
+          totalBrands++;
+          const name = (a.getAttribute('data-brand-name') || '').toLowerCase();
+          const ok = q.length === 0 || name.includes(q);
+          a.classList.toggle('hidden', !ok);
+          if (ok) { hasVisible = true; visibleBrands++; }
+        });
+        row.classList.toggle('hidden', !hasVisible);
+      });
+      if (!q) {
+        notfoundEl.classList.add('hidden');
+        emptyEl.classList.toggle('hidden', totalBrands !== 0);
+        if (statsEl) statsEl.textContent = (totalBrands || 0) + ' брендов';
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      if (visibleBrands === 0) {
+        notfoundEl.classList.remove('hidden');
+        notfoundText.textContent = 'Бренды по запросу \u201C' + query.trim() + '\u201D не найдены';
+        if (statsEl) statsEl.textContent = '0 / ' + totalBrands + ' брендов';
+      } else {
+        notfoundEl.classList.add('hidden');
+        if (statsEl) statsEl.textContent = visibleBrands + ' / ' + totalBrands + ' брендов';
+      }
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        const v = e.target && e.target.value;
+        if (searchClearBtn) searchClearBtn.classList.toggle('hidden', !v);
+        filterMenu(v);
+      });
+      searchInput.addEventListener('focus', () => {
+        if (!loaded) loadMenu();
+      });
+    }
+    if (searchClearBtn) {
+      searchClearBtn.addEventListener('click', () => {
+        if (!searchInput) return;
+        searchInput.value = '';
+        searchClearBtn.classList.add('hidden');
+        filterMenu('');
+        searchInput.focus({ preventScroll: true });
+      });
+    }
+
     function groupByLetter(children) {
       const map = new Map();
       (children || []).forEach(c => {
@@ -656,7 +749,24 @@
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(c);
       });
-      return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, 'ru'));
+      return Array.from(map.entries()).sort(([a], [b]) => {
+        const isEng = (char) => /^[A-Z]$/i.test(char);
+        const isRus = (char) => /^[А-ЯЁ]$/i.test(char);
+
+        const score = (char) => {
+          if (isEng(char)) return 1;
+          if (isRus(char)) return 2;
+          return 3; // Для цифр и спецсимволов (#)
+        };
+
+        const scoreA = score(a);
+        const scoreB = score(b);
+
+        if (scoreA !== scoreB) {
+          return scoreA - scoreB;
+        }
+        return a.localeCompare(b, 'ru');
+      });
     }
 
     async function loadMenu() {
@@ -664,61 +774,65 @@
       try {
         const r = await fetch('/api/menu.json', { cache: 'no-store' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const branches = await r.json();
+        const categories = await r.json();
         loading.classList.add('hidden');
-        if (!branches || !branches.length) {
+        if (!categories || !categories.length) {
           emptyEl.classList.remove('hidden');
           return;
         }
         contentEl.classList.remove('hidden');
         const frag = document.createDocumentFragment();
-        let totalChildren = 0;
-        branches.forEach(branch => {
-          const children = branch.children || [];
-          totalChildren += children.length;
-          const section = document.createElement('section');
-          section.className = 'border-b border-line last:border-b-0';
-          const head = document.createElement('div');
-          head.className = 'px-6 pt-6 pb-3 flex items-end justify-between gap-3';
-          head.innerHTML = `<h3 class="font-sans font-bold text-lg tracking-tight"></h3>
-                            <span class="text-[10px] uppercase tracking-[0.2em] text-muted whitespace-nowrap"></span>`;
-          head.querySelector('h3').textContent = branch.name;
-          head.querySelectorAll('span')[0].textContent = children.length + ' брендов';
-          section.appendChild(head);
+        const total = categories.length;
 
-          const body = document.createElement('div');
-          body.className = 'px-6 pb-6';
-          groupByLetter(children).forEach(([letter, list]) => {
-            const row = document.createElement('div');
-            row.className = 'mb-4 last:mb-0';
-            const lh = document.createElement('div');
-            lh.className = 'flex items-center gap-3 mb-2';
-            lh.innerHTML = `<div class="w-6 h-6 rounded-full bg-black text-white inline-flex items-center justify-center font-mono font-bold text-[11px]"></div>
-                            <div class="text-[10px] uppercase tracking-[0.25em] text-muted"></div>`;
-            lh.querySelector('div').textContent = letter;
-            lh.querySelectorAll('div')[1].textContent = letter;
-            row.appendChild(lh);
-            const grid = document.createElement('div');
-            grid.className = 'grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-9';
-            list.forEach(c => {
-              const a = document.createElement('a');
-              a.href = c.url;
-              a.className = 'group flex items-center justify-between px-3 py-2 rounded-lg text-sm hover:bg-bg border border-transparent hover:border-line transition';
-              a.innerHTML = `<span class="truncate font-medium"></span>
-                             <span class="ml-2 text-[11px] text-muted font-mono tabular-nums"></span>`;
-              a.querySelector('span').textContent = c.name;
-              a.querySelectorAll('span')[1].textContent = c.album_count;
-              grid.appendChild(a);
-            });
-            row.appendChild(grid);
-            body.appendChild(row);
+        const section = document.createElement('section');
+        section.className = 'border-b border-line last:border-b-0';
+        const head = document.createElement('div');
+        head.className = 'px-6 pt-6 pb-3 flex items-end justify-between gap-3';
+        head.innerHTML = `<h3 class="font-sans font-bold text-lg tracking-tight"></h3>
+                          <span class="text-[10px] uppercase tracking-[0.2em] text-muted whitespace-nowrap"></span>`;
+        head.querySelector('h3').textContent = 'Все бренды';
+        head.querySelectorAll('span')[0].textContent = total + ' брендов';
+        section.appendChild(head);
+
+        const body = document.createElement('div');
+        body.className = 'px-6 pb-6';
+        groupByLetter(categories).forEach(([letter, list]) => {
+          const row = document.createElement('div');
+          row.className = 'mb-4 last:mb-0';
+          row.setAttribute('data-letter-row', letter);
+          const lh = document.createElement('div');
+          lh.className = 'flex items-center gap-3 mb-2';
+          lh.innerHTML = `<div class="w-6 h-6 rounded-full bg-black text-white inline-flex items-center justify-center font-mono font-bold text-[11px]"></div>
+                          <div class="text-[10px] uppercase tracking-[0.25em] text-muted"></div>`;
+          lh.querySelector('div').textContent = letter;
+          row.appendChild(lh);
+          const grid = document.createElement('div');
+          grid.className = 'grid grid-cols-2 sm:grid-cols-3 gap-1.5 ml-9';
+          list.forEach(c => {
+            const a = document.createElement('a');
+            a.href = c.url;
+            a.className = 'group flex items-center justify-between px-3 py-2 rounded-lg text-sm hover:bg-bg border border-transparent hover:border-line transition';
+            if (!c.album_count) a.classList.add('opacity-40');
+            a.setAttribute('data-brand-name', _esHtml(c.name || ''));
+            a.innerHTML = `<span class="truncate font-medium"></span>
+                           <span class="ml-2 text-[11px] text-muted font-mono tabular-nums"></span>`;
+            a.querySelector('span').textContent = c.name;
+            a.querySelectorAll('span')[1].textContent = c.album_count;
+            grid.appendChild(a);
           });
-          section.appendChild(body);
-          frag.appendChild(section);
+          row.appendChild(grid);
+          body.appendChild(row);
         });
+        section.appendChild(body);
+        frag.appendChild(section);
+
         contentEl.innerHTML = '';
         contentEl.appendChild(frag);
-        statsEl.textContent = branches.length + ' групп · ' + totalChildren + ' брендов';
+        if (searchInput && searchInput.value) {
+          filterMenu(searchInput.value);
+        } else {
+          filterMenu('');
+        }
       } catch (e) {
         loading.innerHTML = '<span class="text-rose-500 text-sm">Не удалось загрузить меню: ' + (e && e.message ? e.message : 'unknown') + '</span>';
       }
