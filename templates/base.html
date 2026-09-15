@@ -310,7 +310,7 @@
               class="absolute left-0 right-0 mt-3 rounded-2xl bg-white border border-line shadow-panel overflow-hidden z-[60]"
               style="transform-origin: top right;"
             >
-              <div class="max-h-[calc(min(680px,72vh))] overflow-y-auto">
+              <div class="max-h-[calc(min(80dvh,680px))] overflow-y-auto overscroll-contain" style="-webkit-overflow-scrolling: touch;">
                 <template x-if="q.trim().length >= 3 && results.length === 0 && !loading">
                   <div class="px-6 py-12 text-center">
                     <div class="font-sans font-semibold text-lg tracking-tight text-black">Ничего не найдено</div>
@@ -498,9 +498,7 @@
                     >
                       <a
                         :href="r.url || ('/album/' + r.id)"
-                        @mousedown.prevent
-                        @mouseup.prevent="closeMobile(); const u = r.url || ('/album/' + r.id); window.location.href = u;"
-                        @touchstart.prevent="idx = i"
+                        @click="closeMobile()"
                         class="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl transition cursor-pointer hover:bg-gray-50 active:bg-gray-100"
                       >
                         <div class="shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-line" style="width: 150px; height: 150px;">
