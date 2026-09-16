@@ -92,17 +92,25 @@
     _searchOpen: false,
     _isMobile() { return window.innerWidth < 768; },
     _updateLock() { 
-      this.searchLocked = this._isMobile() && this._searchOpen; 
+      const shouldLock = this._isMobile() && this._searchOpen;
+      
+      // Если состояние не изменилось — ничего не делаем (игнорируем ресайзы адресной строки!)
+      if (this.searchLocked === shouldLock) return;
+
+      this.searchLocked = shouldLock;
+
       if (this.searchLocked) {
-        document.body.style.top = `-${window.scrollY}px`;
+        document.body.dataset.savedScrollY = String(window.scrollY || 0);
+        document.body.style.top = `-${window.scrollY || 0}px`;
         document.body.style.position = "fixed";
         document.body.style.width = "100%";
       } else {
-        const scrollY = document.body.style.top;
+        const savedY = parseInt(document.body.dataset.savedScrollY || "0", 10);
         document.body.style.position = "";
         document.body.style.top = "";
         document.body.style.width = "";
-        window.scrollTo(0, parseInt(scrollY || "0") * -1);
+        delete document.body.dataset.savedScrollY;
+        window.scrollTo(0, savedY);
       }
     }
   }'
