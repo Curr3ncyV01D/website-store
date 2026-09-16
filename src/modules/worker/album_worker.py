@@ -13,6 +13,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import urllib.parse
+
 from loguru import logger
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -46,6 +48,21 @@ IMG_URL_ATTRS: tuple[str, ...] = (
     "data-origin",
     "src",
 )
+
+
+def extract_yupoo_hash(url: Optional[str]) -> Optional[str]:
+    """Извлекает уникальный хэш фото из ссылки Yupoo."""
+    if not url:
+        return None
+    try:
+        parsed = urllib.parse.urlparse(url)
+        path = parsed.path or url
+        parts = [p for p in path.split("/") if p]
+        if len(parts) >= 2:
+            return parts[1].strip().lower()
+    except Exception:
+        pass
+    return None
 
 
 @dataclass
@@ -305,9 +322,28 @@ class AlbumWorker:
                     reused_existing: int = 0
                     broken_or_tiny: int = 0
 
+                    target_cover_idx: Optional[int] = None
+                    cover_hash = extract_yupoo_hash(album.cover_url)
+                    if cover_hash:
+                        for i, u in enumerate(image_urls):
+                            if extract_yupoo_hash(u) == cover_hash:
+                                target_cover_idx = i
+                                break
+                    hash_matched = target_cover_idx is not None
+                    if target_cover_idx is None:
+                        target_cover_idx = 0
+                        if len(image_urls) > 1:
+                            first_lower = (image_urls[0] or "").lower()
+                            if any(k in first_lower for k in ("size", "table", "chart")):
+                                target_cover_idx = 1
+                    logger.info(
+                        f"[AlbumWorker] album id={album_id}: cover_idx={target_cover_idx} "
+                        f"(hash_matched={hash_matched})"
+                    )
+
                     for idx, raw_url in enumerate(image_urls):
                         position: int = idx
-                        is_cover: bool = idx == 0
+                        is_cover: bool = idx == target_cover_idx
                         using_url = raw_url
 
                         existing_tg = await self._find_existing_tg_file_id(
@@ -371,7 +407,7 @@ class AlbumWorker:
 
                         tg_file_id: Optional[str] = None
                         caption_parts: list[str] = []
-                        if idx == 0:
+                        if idx == target_cover_idx:
                             if album.clean_title:
                                 caption_parts.append(album.clean_title)
                             caption_parts.append(album_url)
