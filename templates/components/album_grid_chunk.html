@@ -40,7 +40,7 @@
       <div
         hx-get="{{ next_url }}"
         hx-trigger="revealed"
-        hx-swap="outerHTML"
+        hx-swap="outerHTML show:none scroll:none"
         hx-target="closest div.hx-sentinel-wrap"
         hx-indicator=".htmx-sentinel-indicator-{{ page }}"
         hx-headers='{"Accept": "text/html"}'
