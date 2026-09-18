@@ -21,6 +21,48 @@
       opacity: 1;
     }
   </style>
+
+  <!-- updatePswpAttributes ДО <body> чтобы onload на img НИКОГДА не падал
+       с ReferenceError даже если изображение в HTTP-кэше и onload стреляет сразу
+       при рендере первого байта body. Idempotent: img.complete → вызовем и при
+       DOMContentLoaded для всех уже загруженных. -->
+  <script>
+    (function () {
+      function updatePswpAttributes (img) {
+        if (!img || !img.naturalWidth) return;
+        const link = img.closest('a.pswp-link');
+        if (!link) return;
+        link.dataset.pswpWidth = String(img.naturalWidth);
+        link.dataset.pswpHeight = String(img.naturalHeight);
+      }
+
+      window.updatePswpAttributes = updatePswpAttributes;
+
+      function syncAll (root) {
+        const r = root || document;
+        const imgs = r.querySelectorAll('a.pswp-link img');
+        for (let i = 0; i < imgs.length; i++) {
+          const im = imgs[i];
+          if (im.complete && im.naturalWidth > 0) updatePswpAttributes(im);
+          else {
+            im.addEventListener('load', function () { updatePswpAttributes(im); }, { once: true });
+            im.addEventListener('error', function () { im.classList.add('is-loaded'); }, { once: true });
+          }
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { syncAll(); }, { once: true });
+      } else {
+        syncAll();
+      }
+
+      document.addEventListener('htmx:afterSwap', function (evt) {
+        if (!evt || !evt.target) return;
+        try { syncAll(evt.target); } catch (_) {}
+      });
+    })();
+  </script>
 {% endblock %}
 
 {% block content %}
@@ -104,7 +146,7 @@
            alt="Фото {{ loop.index }}"
            loading="lazy"
            class="w-full h-full object-cover aspect-square lazy-fade transition-transform duration-500 ease-in-out group-hover:scale-110"
-           onload="updatePswpAttributes(this); this.classList.add('is-loaded');">
+           onload="(typeof window.updatePswpAttributes === 'function') && window.updatePswpAttributes(this); this.classList.add('is-loaded');">
       
       <div class="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
     </a>
@@ -254,19 +296,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script>
-  // Синхронизация пропорций: как только превью загрузилось — пишем его реальные
-  // натуральные размеры в data-pswp-width/height родительской ссылки.
-  // PhotoSwipe 5 возьмёт эти готовые данные ДО начала анимации открытия.
-  window.updatePswpAttributes = function (img) {
-    if (!img || !img.naturalWidth) return;
-    const link = img.closest('a.pswp-link');
-    if (!link) return;
-    link.dataset.pswpWidth = String(img.naturalWidth);
-    link.dataset.pswpHeight = String(img.naturalHeight);
-  };
-</script>
-
 <script type="module">
   const galleryContainer = document.getElementById('album-gallery');
   if (galleryContainer) {
@@ -291,5 +320,7 @@
   });
 
   lightbox.init();
+  window.__ps_lightbox = lightbox;
 </script>
 {% endblock %}
+

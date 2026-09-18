@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
   {% include "components/head.html" %}
+  {% block extra_head %}{% endblock %}
 </head>
 <body
   x-data="searchLock()"
