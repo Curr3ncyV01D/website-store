@@ -1,0 +1,63 @@
+<div id="menu-overlay"
+     class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200"
+     aria-hidden="true" role="dialog" aria-modal="true" aria-label="Меню брендов">
+  <div class="absolute inset-0 flex items-stretch justify-start">
+    <div id="menu-panel"
+         class="w-full max-w-[540px] sm:max-w-[680px] md:max-w-[1000px] h-full bg-surface shadow-2xl -translate-x-full transition-transform duration-200 flex flex-col">
+      <div class="flex items-center justify-between border-b border-line px-6 py-5">
+        <div>
+          <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Навигация</div>
+          <div class="font-sans font-bold text-xl tracking-tight mt-1">Все бренды</div>
+        </div>
+        <button id="menu-close" type="button" aria-label="Закрыть меню"
+                class="h-10 w-10 rounded-full border border-line hover:bg-bg inline-flex items-center justify-center transition">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="border-b border-line px-6 py-4">
+        <div id="menu-search-wrap" class="relative flex items-center w-full">
+          <span class="absolute left-3.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-4 h-4 text-muted pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+              <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <input id="menu-search" type="search" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                 placeholder="Поиск бренда…"
+                 class="w-full h-11 pl-10 pr-10 rounded-xl bg-bg border border-line focus:border-black/40 focus:bg-surface outline-none transition text-sm placeholder:text-muted/80"
+          />
+          <button id="menu-search-clear" type="button" aria-label="Очистить поиск"
+                  class="hidden absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-full hover:bg-surface text-muted hover:text-black transition text-lg leading-none select-none"
+                  tabindex="-1">&times;</button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto">
+        <div id="menu-loading" class="px-6 py-20 text-center text-muted text-sm">Загружаем бренды…</div>
+        <div id="menu-content" class="hidden"></div>
+        <div id="menu-empty" class="hidden px-6 py-20 text-center text-muted text-sm">
+          Категории не найдены. Запустите crawler и discovery.
+        </div>
+        <div id="menu-notfound" class="hidden px-6 py-20 text-center">
+          <div class="inline-flex flex-col items-center gap-2.5">
+            <div class="w-10 h-10 rounded-full bg-bg border border-line inline-flex items-center justify-center text-muted">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+                <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div id="menu-notfound-text" class="text-sm text-muted leading-[1.25] max-w-[20rem]"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-line px-6 py-3 text-[11px] text-muted flex items-center justify-between gap-4">
+        <span>Бренды сгруппированы по первому символу для быстрой навигации.</span>
+        <span id="menu-stats" class="font-mono tabular-nums whitespace-nowrap"></span>
+      </div>
+    </div>
+  </div>
+</div>

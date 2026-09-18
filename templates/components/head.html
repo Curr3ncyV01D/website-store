@@ -1,0 +1,81 @@
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}semsneak — Каталог уличного стиля и кроссовок{% endblock %}</title>
+  <meta name="description" content="Каталог уличной одежды и кроссовок. Минимализм, быстрая доставка, умный поиск по опечаткам.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: '#fafafa',
+            surface: '#ffffff',
+            line: '#eceff3',
+            muted: '#71717a',
+            ink: '#09090b',
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+          boxShadow: {
+            card: '0 10px 30px -10px rgba(0, 0, 0, 0.15), 0 4px 12px -6px rgba(0, 0, 0, 0.08)',
+            panel: '0 20px 60px -15px rgba(0, 0, 0, 0.18), 0 8px 20px -10px rgba(0, 0, 0, 0.10)',
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    html, body { background-color: #fafafa; overflow-x: visible; }
+    .h-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .h-scroll::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; scroll-behavior: smooth; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    [x-cloak] { display: none !important; }
+    .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; display: none; }
+    .htmx-request .htmx-indicator { opacity: 1; display: grid; }
+    .htmx-request.htmx-indicator { opacity: 1; display: grid; }
+    img.lazy-fade {
+      opacity: 0;
+      transform: translateY(2px);
+      transition: opacity 420ms ease-out, transform 420ms ease-out;
+    }
+    img.lazy-fade.is-loaded,
+    img.lazy-fade[src^="/media/image/"],
+    img.lazy-fade[src^="/static/images/"] {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .album-card.htmx-fade-in {
+      animation: htmx-fade-in 350ms ease-out both;
+    }
+    @keyframes htmx-fade-in {
+      0% { opacity: 0; transform: translateY(6px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const markLoaded = (img) => { if (img && img.classList && img.classList.contains("lazy-fade")) img.classList.add("is-loaded"); };
+      document.querySelectorAll("img.lazy-fade").forEach(function (img) {
+        if (img.complete && img.naturalWidth > 0) markLoaded(img);
+        else { img.addEventListener("load", function () { markLoaded(img); }, { once: true }); img.addEventListener("error", function () { markLoaded(img); }, { once: true }); }
+      });
+    });
+    document.addEventListener("htmx:afterSwap", function (evt) {
+      if (!evt || !evt.target) return;
+      try {
+        evt.target.querySelectorAll && evt.target.querySelectorAll("img.lazy-fade").forEach(function (img) {
+          if (img.complete && img.naturalWidth > 0) { img.classList && img.classList.add("is-loaded"); return; }
+          img.addEventListener("load", function () { img.classList && img.classList.add("is-loaded"); }, { once: true });
+          img.addEventListener("error", function () { img.classList && img.classList.add("is-loaded"); }, { once: true });
+        });
+      } catch (_) {}
+    });
+  </script>
+  {% block extra_head %}{% endblock %}

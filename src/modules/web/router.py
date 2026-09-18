@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import io
 import math
 import os
 import sys
-from contextlib import asynccontextmanager
-from pathlib import Path as StdLibPath
 from typing import Optional
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import aiofiles
 import asyncio
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Path as FastAPIPath, Query, Request, status
@@ -21,13 +17,12 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from urllib.parse import quote as urlquote
 
 load_dotenv()
 
-from src.core.config import get_recommended_brands, settings
-from src.db.models import Image
+from src.core.config import settings
 from src.db.queries import (
     DEFAULT_PER_PAGE,
     DEFAULT_SEARCH_LIMIT,
@@ -47,152 +42,45 @@ from src.db.queries import (
     search_albums,
     search_albums_suggest,
 )
-from src.db.session import dispose_engine, get_db_session, get_session_factory
-
-PROJECT_ROOT_PATH: StdLibPath = StdLibPath(PROJECT_ROOT)
-STATIC_IMAGES_DIR: StdLibPath = PROJECT_ROOT_PATH / "static" / "images"
-MEDIA_CACHE_DIR: StdLibPath = PROJECT_ROOT_PATH / "data" / "media_cache"
-TEMPLATES_DIR: StdLibPath = PROJECT_ROOT_PATH / "templates"
-
-PLACEHOLDER_FILENAME: str = "no-image.png"
-PLACEHOLDER_PATH: StdLibPath = STATIC_IMAGES_DIR / PLACEHOLDER_FILENAME
-
-FAVICON_FILENAME: str = "favicon.ico"
-FAVICON_PATH: StdLibPath = STATIC_IMAGES_DIR / FAVICON_FILENAME
-
-FAVICON_SVG_FALLBACK: str = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">'
-    '<rect width="64" height="64" rx="12" fill="#09090b"/>'
-    '<text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" '
-    'font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" '
-    'font-weight="800" font-size="28" fill="#ffffff">M</text>'
-    '</svg>'
+from src.db.schemas import BreadcrumbItem
+from src.db.session import get_db_session, get_session_factory
+from src.services import (
+    MediaService,
+    get_default_media_service,
+    pick_brand_category_ids,
+    top_keyword_brands,
 )
 
-CACHE_CONTROL_HEADER_VALUE: str = "public, max-age=86400"
-PLACEHOLDER_CACHE_CONTROL: str = "public, max-age=3600"
-FAVICON_CACHE_CONTROL: str = "public, max-age=7200"
+PLACEHOLDER_FILENAME: str = "no-image.png"
+_INFINITE_SCROLL_PER_PAGE: int = 36
 
 
-def _build_database_url_for_router() -> str:
-    from src.core.config import settings as _settings
-    user = os.getenv("DB_USER", "postgres")
-    password = os.getenv("DB_PASSWORD", "postgres")
-    host = os.getenv("DB_HOST", "localhost")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "yupoo_db")
-    try:
-        if _settings and getattr(_settings, "DB_PORT", None):
-            port = str(int(getattr(_settings, "DB_PORT")))
-    except Exception:
-        pass
-    return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+async def _tpl(request: Request) -> Jinja2Templates:
+    tpl: Optional[Jinja2Templates] = getattr(request.app.state, "templates", None)
+    if tpl is not None:
+        return tpl
+    from fastapi.templating import Jinja2Templates as _Jinja2Templates
 
-_ROUTER_DB_URL = _build_database_url_for_router()
-_ROUTER_ENGINE: Optional[AsyncEngine] = None
-_ROUTER_SESSION_FACTORY: Optional[async_sessionmaker[AsyncSession]] = None
-
-def _router_get_session_factory() -> async_sessionmaker[AsyncSession]:
-    global _ROUTER_ENGINE, _ROUTER_SESSION_FACTORY
-    if _ROUTER_SESSION_FACTORY is None:
-        _ROUTER_ENGINE = create_async_engine(
-            _ROUTER_DB_URL,
-            echo=False,
-            future=True,
-            pool_pre_ping=False,
-            pool_size=5,
-            max_overflow=10,
-        )
-        _ROUTER_SESSION_FACTORY = async_sessionmaker(
-            bind=_ROUTER_ENGINE,
-            class_=AsyncSession,
-            expire_on_commit=False,
-            autoflush=False,
-        )
-    return _ROUTER_SESSION_FACTORY
+    tpl_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "templates")
+    fallback = _Jinja2Templates(directory=tpl_dir)
+    fallback.env.globals["settings"] = settings
+    return fallback
 
 
-def _templates() -> Jinja2Templates:
-    tpl = Jinja2Templates(directory=str(TEMPLATES_DIR))
-    tpl.env.globals["settings"] = settings
-    return tpl
-
-
-def ensure_dirs() -> None:
-    for d in (STATIC_IMAGES_DIR, MEDIA_CACHE_DIR, TEMPLATES_DIR):
-        try:
-            d.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            logger.warning(f"[web.router] couldn't ensure dir {d}: {e}")
-
-
-def _build_minimal_placeholder_png_bytes() -> bytes:
-    import zlib
-    import struct
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-
-    width = 1
-    height = 1
-    sig = b"\x89PNG\r\n\x1a\n"
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    raw = b"\x00\xaa\xaa\xaa"
-    idat = zlib.compress(raw, 9)
-    return sig + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
-
-
-async def ensure_placeholder_exists() -> None:
-    ensure_dirs()
-    if PLACEHOLDER_PATH.exists() and PLACEHOLDER_PATH.stat().st_size > 10:
-        return
-    try:
-        data = _build_minimal_placeholder_png_bytes()
-        async with aiofiles.open(PLACEHOLDER_PATH, "wb") as f:
-            await f.write(data)
-        logger.info(
-            f"[web.router] wrote placeholder PNG to {PLACEHOLDER_PATH} ({len(data)} bytes)"
-        )
-    except Exception as e:
-        logger.exception(f"[web.router] FAILED to write placeholder {PLACEHOLDER_PATH}: {e}")
-
-
-def _cache_path_for(image_id: int) -> StdLibPath:
-    return MEDIA_CACHE_DIR / f"{int(image_id)}.jpg"
+async def _media_svc(request: Request) -> MediaService:
+    svc: Optional[MediaService] = getattr(request.app.state, "media_service", None)
+    if svc is None:
+        svc = getattr(getattr(request.app.state, "services", None), "media", None)
+    if svc is None:
+        svc = get_default_media_service()
+    return svc
 
 
 router = APIRouter(tags=["web"])
 
-
-@router.on_event("startup")
-async def _router_startup() -> None:
-    ensure_dirs()
-    await ensure_placeholder_exists()
-
-
 @router.get("/favicon.ico", tags=["static"])
-async def favicon():
-    """
-    Возвращает favicon.ico из static/images, если он есть;
-    иначе — 204 No Content + SVG-fallback link (через <link rel=icon>)
-    либо inline SVG-заглушка, чтобы не было 404 в консоли браузера.
-    """
-    try:
-        if FAVICON_PATH.exists() and FAVICON_PATH.is_file() and FAVICON_PATH.stat().st_size > 0:
-            resp = FileResponse(
-                path=str(FAVICON_PATH),
-                media_type="image/x-icon",
-                filename=FAVICON_FILENAME,
-            )
-            resp.headers["Cache-Control"] = FAVICON_CACHE_CONTROL
-            return resp
-    except Exception as e:
-        logger.debug(f"[web.router] /favicon.ico file open fail -> fallback: {type(e).__name__}")
-
-    fallback_bytes = FAVICON_SVG_FALLBACK.encode("utf-8")
-    resp = Response(content=fallback_bytes, media_type="image/svg+xml")
-    resp.headers["Cache-Control"] = FAVICON_CACHE_CONTROL
-    return resp
+async def favicon(media: MediaService = Depends(_media_svc)):
+    return media.favicon_response()
 
 
 @router.get("/api/menu.json", tags=["api", "menu"])
@@ -211,81 +99,12 @@ async def api_menu_json(session: AsyncSession = Depends(get_db_session)) -> JSON
     return JSONResponse(content=jsonable_encoder(payload))
 
 
-def _top_keyword_brands() -> list[str] | None:
-    """
-    Рекомендуемые бренды для витрины главной страницы.
-
-    Источник ТОЛЬКО settings.RECOMMENDED_BRANDS (конфигурация через .env).
-    НЕ используем CRAWL_KEYWORDS как fallback (они технические, для crawler).
-
-    Возвращает:
-      - list[str] UPPERCASE (до 8 брендов) — если в .env явно задан список;
-      - None — в остальных случаях (блок «Популярные бренды» на главной скрывается).
-    """
-    explicit = get_recommended_brands()
-    cleaned_primary = [w for w in explicit if w and w not in {"SHOES"}]
-    if cleaned_primary:
-        return cleaned_primary[:8]
-    return None
-
-
-async def _pick_brand_category_ids(
-    session: AsyncSession,
-    brand_names: list[str] | None,
-    *,
-    limit_per_brand: int = 1,
-) -> list[tuple[str, int, str]]:
-    """
-    Для каждого бренд-имени подбираем category.id из категорий (любого уровня)
-    по case-insensitive match через ILIKE.
-
-    Правило выбора:
-      * Сначала сортируем по убыванию album_count (категория с большим числом
-        альбомов приоритетнее — не показываем пустые «родители» если есть
-        насыщенный подкатегория).
-      * Затем по имени ASC для детерминизма.
-      * Дедупликация по category_id — одна категория = одна «пилюля».
-
-    Возвращает [(brand_keyword_lookup, category_id, pretty_display_name)].
-    В `pretty_display_name` — очищенное имя категории из БД (в верхнем регистре
-    как в Streetwear маркетплейсе, с сохранением пробелов).
-    """
-    from src.db.models import Category
-
-    out: list[tuple[str, int, str]] = []
-    if not brand_names:
-        return out
-    seen_ids: set[int] = set()
-    try:
-        for brand in brand_names:
-            name_like = f"%{brand}%"
-            stmt = (
-                select(Category.id, Category.name)
-                .where(Category.name.ilike(name_like))
-                .limit(limit_per_brand)
-            )
-            rows = (await session.execute(stmt)).all()
-            for row in rows:
-                cid = int(row[0])
-                raw_name = row[1]
-                if cid in seen_ids:
-                    continue
-                seen_ids.add(cid)
-                pretty = (str(raw_name or brand)).strip()
-                pretty_upper = pretty.upper() if pretty else str(brand or "").upper()
-                out.append((str(brand or "").upper(), cid, pretty_upper))
-                break
-    except Exception as e:
-        logger.debug(f"[web.router._pick_brand_category_ids] partial fail: {type(e).__name__}")
-    return out
-
-
 @router.get("/", response_class=HTMLResponse, tags=["pages"])
 async def homepage(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
+    tpl: Jinja2Templates = Depends(_tpl),
 ):
-    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
     latest_total = 0
     latest_total_pages = 1
     try:
@@ -304,9 +123,9 @@ async def homepage(
         per_def = max(1, int(DEFAULT_PER_PAGE))
         latest_total_pages = max(1, math.ceil(max(latest_total, len(latest)) / per_def)) if per_def > 0 else 1
         try:
-            brands = await _pick_brand_category_ids(session, _top_keyword_brands(), limit_per_brand=1)
+            brands = await pick_brand_category_ids(session, top_keyword_brands(), limit_per_brand=1)
         except Exception as e:
-            logger.exception(f"[web.router] homepage _pick_brand_category_ids failed: {type(e).__name__} -> empty list")
+            logger.exception(f"[web.router] homepage pick_brand_category_ids failed: {type(e).__name__} -> empty list")
             brands = []
     except BaseException as e:
         if "CancelledError" in type(e).__name__:
@@ -328,8 +147,10 @@ async def homepage(
 
 
 @router.get("/about", response_class=HTMLResponse, tags=["pages"])
-async def about_page(request: Request):
-    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
+async def about_page(
+    request: Request,
+    tpl: Jinja2Templates = Depends(_tpl),
+):
     manager_username = str(getattr(settings, "MANAGER_USERNAME", "") or "").strip().lstrip("@")
     instagram_username = str(getattr(settings, "INSTAGRAM_USERNAME", "") or "").strip().lstrip("@")
     reviews_channel_url = str(getattr(settings, "REVIEWS_CHANNEL_URL", "") or "").strip()
@@ -349,15 +170,13 @@ async def about_page(request: Request):
     return tpl.TemplateResponse("about.html", context)
 
 
-_INFINITE_SCROLL_PER_PAGE: int = 36
-
-
 @router.get("/partial/albums", response_class=HTMLResponse, tags=["partial"])
 async def partial_albums_grid(
     request: Request,
     page: int = Query(default=1, ge=1, le=100000),
     category_id: Optional[int] = Query(default=None, ge=1, le=10**9),
     session: AsyncSession = Depends(get_db_session),
+    tpl: Jinja2Templates = Depends(_tpl),
 ):
     """
     HTMX-fragment: только HTML сетки карточек + sentinel hx-trigger=revealed следующей страницы.
@@ -367,7 +186,6 @@ async def partial_albums_grid(
     все последующие подгрузки через Infinite Scroll были согласованы.
     """
     per_page: int = _INFINITE_SCROLL_PER_PAGE
-    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
     pagination: Optional[PaginatedAlbums] = None
     try:
         if category_id is None:
@@ -411,8 +229,8 @@ async def category_page(
     category_id: int = FastAPIPath(..., ge=1),
     page: int = Query(default=1, ge=1, le=10000),
     session: AsyncSession = Depends(get_db_session),
+    tpl: Jinja2Templates = Depends(_tpl),
 ):
-    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
 
     per_page: int = _INFINITE_SCROLL_PER_PAGE
     category = None
@@ -463,10 +281,10 @@ async def category_page(
 async def album_page(
     request: Request,
     album_id: int = FastAPIPath(..., ge=1),
+    tpl: Jinja2Templates = Depends(_tpl),
 ):
-    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
     detail: Optional[AlbumDetail] = None
-    sf: async_sessionmaker[AsyncSession] = _router_get_session_factory()
+    sf: async_sessionmaker[AsyncSession] = get_session_factory()
     async with sf() as s2:
         try:
             detail = await get_album_detail(s2, album_id)
@@ -542,9 +360,9 @@ async def search_page(
     limit: int = Query(default=DEFAULT_SEARCH_LIMIT, ge=1, le=200),
     threshold: float = Query(default=DEFAULT_SIMILARITY_THRESHOLD, gt=0.0, lt=1.0),
     session: AsyncSession = Depends(get_db_session),
+    tpl: Jinja2Templates = Depends(_tpl),
 ):
     q_raw = (q or "").strip()
-    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
     if not q_raw:
         logger.debug("[web.router] /search called with empty 'q' -> redirect /")
         return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
@@ -567,135 +385,17 @@ async def search_page(
     return tpl.TemplateResponse("search.html", context)
 
 
-def _placeholder_response(*, error_message: Optional[str] = None) -> Response:
-    if PLACEHOLDER_PATH.exists():
-        resp = FileResponse(
-            path=PLACEHOLDER_PATH,
-            media_type="image/png",
-        )
-        resp.headers["Content-Disposition"] = "inline"
-        resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["Cache-Control"] = PLACEHOLDER_CACHE_CONTROL
-        if error_message:
-            resp.headers["X-Placeholder-Reason"] = str(error_message)[:200]
-        return resp
-    data = _build_minimal_placeholder_png_bytes()
-    resp = Response(content=data, media_type="image/png")
-    resp.headers["Content-Disposition"] = "inline"
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["Cache-Control"] = PLACEHOLDER_CACHE_CONTROL
-    if error_message:
-        resp.headers["X-Placeholder-Reason"] = str(error_message)[:200]
-    return resp
-
-
 @router.get("/media/image/{image_id}", tags=["media"])
 async def get_media_image(
     request: Request,
     image_id: int = FastAPIPath(..., ge=1),
     session: AsyncSession = Depends(get_db_session),
-    session_factory: async_sessionmaker[AsyncSession] = Depends(get_session_factory),
+    media: MediaService = Depends(_media_svc),
 ) -> Response:
-    cache_path: StdLibPath = _cache_path_for(image_id)
-    if cache_path.exists():
-        size = cache_path.stat().st_size
-        if size > 0:
-            logger.debug(
-                f"[web.router] /media/image/{image_id}: serve CACHE HIT from {cache_path.name} ({size} bytes)"
-            )
-            resp = FileResponse(
-                path=cache_path,
-                media_type="image/jpeg",
-            )
-            # Explicitly inline = never trigger Save-As dialog; browsers render inline.
-            resp.headers["Content-Disposition"] = "inline"
-            resp.headers["X-Content-Type-Options"] = "nosniff"
-            resp.headers["Cache-Control"] = CACHE_CONTROL_HEADER_VALUE
-            resp.headers["X-Cache"] = "HIT"
-            return resp
-        try:
-            cache_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    img: Optional[Image] = None
-    try:
-        q = await session.execute(
-            select(Image).where(Image.id == image_id).limit(1)
-        )
-        img = q.scalar_one_or_none()
-    except Exception as e:
-        logger.exception(
-            f"[web.router] /media/image/{image_id}: DB select Image failed -> placeholder"
-        )
-        return _placeholder_response(error_message=f"db_select_error: {type(e).__name__}")
-
-    if img is None:
-        logger.warning(
-            f"[web.router] /media/image/{image_id}: NOT FOUND in DB images.id -> placeholder"
-        )
-        return _placeholder_response(error_message="image_id_not_found")
-
-    tg_file_id = img.tg_file_id
-    if not tg_file_id:
-        logger.warning(
-            f"[web.router] /media/image/{image_id}: empty tg_file_id in DB (row exists but not uploaded yet) -> placeholder"
-        )
-        return _placeholder_response(error_message="empty_tg_file_id")
-
-    tg_service = getattr(getattr(request, "app", None), "state", None)
-    tg = None
-    if tg_service is not None:
-        tg = getattr(tg_service, "tg_service", None)
-
-    if tg is None:
-        logger.error(
-            f"[web.router] /media/image/{image_id}: TelegramService singleton MISSING in app.state "
-            f"(lifespan failed or TG_TOKEN/TG_CHAT_ID wrong? check startup logs) -> placeholder"
-        )
-        return _placeholder_response(error_message="tg_service_missing_in_app_state")
-
-    try:
-        raw_bytes: bytes = await tg.download_file(str(tg_file_id))
-    except Exception as e:
-        logger.exception(
-            f"[web.router] /media/image/{image_id}: TelegramService download_file failed -> placeholder"
-        )
-        return _placeholder_response(
-            error_message=f"tg_download_error: {type(e).__name__}: {str(e)[:120]}"
-        )
-
-    if not raw_bytes:
-        logger.error(
-            f"[web.router] /media/image/{image_id}: Telegram returned 0 bytes -> placeholder"
-        )
-        return _placeholder_response(error_message="tg_empty_bytes")
-
-    # async write cache (aiofiles), keep as JPG
-    try:
-        async with aiofiles.open(cache_path, "wb") as f:
-            await f.write(raw_bytes)
-        logger.info(
-            f"[web.router] /media/image/{image_id}: CACHE STORED -> {cache_path.name} ({len(raw_bytes)} bytes)"
-        )
-    except Exception as e:
-        logger.warning(
-            f"[web.router] /media/image/{image_id}: failed to write cache file {cache_path}: {e} — serving bytes from memory"
-        )
-
-    resp: Response
-    if cache_path.exists() and cache_path.stat().st_size > 0:
-        resp = FileResponse(
-            path=cache_path,
-            media_type="image/jpeg",
-        )
-    else:
-        resp = Response(content=raw_bytes, media_type="image/jpeg")
-    resp.headers["Content-Disposition"] = "inline"
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["Cache-Control"] = CACHE_CONTROL_HEADER_VALUE
-    resp.headers["X-Cache"] = "MISS (from TG this time)"
-    return resp
+    tg_service = getattr(getattr(request.app.state, "services", None), "tg", None)
+    if tg_service is None:
+        tg_service = getattr(request.app.state, "tg_service", None)
+    return await media.serve_image(image_id, session, tg_service)
 
 
 @router.get("/api/search/suggest", tags=["api", "search"])
