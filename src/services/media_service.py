@@ -54,7 +54,7 @@ class MediaService:
         *,
         placeholder_filename: str = "no-image.png",
         favicon_filename: str = "favicon.ico",
-        favicon_svg_text: str = "M",
+        favicon_svg_text: str = "ss",
         favicon_svg_text_fill: str = "#ffffff",
         cache_control_image: str = DEFAULT_CACHE_CONTROL,
         cache_control_placeholder: str = DEFAULT_PLACEHOLDER_CACHE_CONTROL,
