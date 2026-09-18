@@ -24,6 +24,45 @@
 {% endblock %}
 
 {% block content %}
+<div
+  x-data='{
+    orderModalOpen: false,
+    _savedY: 0,
+    _weLocked: false,
+    _syncScroll() {
+      const body = document.body;
+      if (this.orderModalOpen) {
+        const searchLocked = body.classList.contains("overflow-hidden");
+        if (!searchLocked) {
+          this._savedY = window.scrollY || 0;
+          body.dataset.savedScrollY = String(this._savedY);
+          body.style.top = `-${this._savedY}px`;
+          body.style.position = "fixed";
+          body.style.width = "100%";
+          body.classList.add("overflow-hidden");
+          this._weLocked = true;
+        } else {
+          this._weLocked = false;
+        }
+      } else {
+        if (this._weLocked) {
+          const y = parseInt(body.dataset.savedScrollY || String(this._savedY || 0), 10);
+          body.style.position = "";
+          body.style.top = "";
+          body.style.width = "";
+          try { delete body.dataset.savedScrollY; } catch (_) {}
+          body.classList.remove("overflow-hidden");
+          window.scrollTo(0, y);
+          this._weLocked = false;
+        }
+        this._savedY = 0;
+      }
+    }
+  }'
+  x-effect="_syncScroll()"
+  @keydown.escape.window="orderModalOpen = false"
+>
+
 <nav class="mb-3 md:mb-6 flex items-center gap-1.5 md:gap-2 text-sm text-muted" aria-label="Хлебные крошки">
   {% for crumb in breadcrumbs %}
     {% if not loop.last %}
@@ -43,13 +82,14 @@
     </h1>
   </div>
   
-  <a href="{{ telegram_order_url }}" target="_blank"
-     class="hidden md:flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-medium hover:bg-zinc-800 transition-all active:scale-95">
+  <button type="button"
+          @click="orderModalOpen = true"
+          class="hidden md:flex items-center justify-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-medium hover:bg-zinc-800 transition-all active:scale-95">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
     </svg>
-    Заказать в Telegram
-  </a>
+    Заказать
+  </button>
 </header>
 
 <div id="album-gallery" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5 md:gap-2 md:gap-3">
@@ -76,13 +116,140 @@
 </div>
 
 <div class="md:hidden fixed inset-x-0 bottom-0 p-3 md:p-4 bg-white/80 backdrop-blur-lg border-t border-line z-50">
-  <a href="{{ telegram_order_url }}" target="_blank"
-     class="flex items-center justify-center gap-2 bg-black text-white w-full py-3.5 md:py-4 rounded-2xl font-bold transition-all active:scale-95">
+  <button type="button"
+          @click="orderModalOpen = true"
+          class="flex items-center justify-center gap-2 bg-black text-white w-full py-3.5 md:py-4 rounded-2xl font-bold transition-all active:scale-95">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
     </svg>
-    Заказать в Telegram
-  </a>
+    Заказать
+  </button>
+</div>
+
+<div
+  x-show="orderModalOpen"
+  x-transition:enter="transition ease-out duration-200"
+  x-transition:enter-start="opacity-0"
+  x-transition:enter-end="opacity-100"
+  x-transition:leave="transition ease-in duration-150"
+  x-transition:leave-start="opacity-100"
+  x-transition:leave-end="opacity-0"
+  x-cloak
+  class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[90]"
+  @click="orderModalOpen = false"
+  aria-hidden="true"
+></div>
+
+<div
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="order-modal-title"
+  x-show="orderModalOpen"
+  x-cloak
+  class="z-[100] bg-white shadow-2xl fixed inset-x-0 bottom-0 rounded-t-3xl p-6 pb-8 min-h-[65vh] max-h-[85vh] flex flex-col justify-between overflow-y-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:rounded-2xl sm:min-h-0 sm:p-8"
+  x-transition:enter="transition-all duration-300 ease-out"
+  x-transition:enter-start="opacity-0 translate-y-full sm:translate-y-[-45%] sm:scale-[0.96]"
+  x-transition:enter-end="opacity-100 translate-y-0 sm:translate-y-[-50%] sm:scale-100"
+  x-transition:leave="transition-all duration-200 ease-in"
+  x-transition:leave-start="opacity-100 translate-y-0 sm:translate-y-[-50%] sm:scale-100"
+  x-transition:leave-end="opacity-0 translate-y-1/3 sm:translate-y-[-52%] sm:scale-[0.97]"
+  @click.stop
+>
+  <button type="button"
+          @click="orderModalOpen = false"
+          aria-label="Закрыть"
+          class="absolute top-5 right-5 h-10 w-10 rounded-full border border-transparent hover:border-line hover:bg-bg inline-flex items-center justify-center text-muted hover:text-black transition z-10">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <div class="flex flex-col">
+    <div class="mb-7 sm:mb-8 pr-12">
+      <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5">Заказ</div>
+      <h2 id="order-modal-title" class="font-sans font-extrabold text-2xl sm:text-[28px] tracking-tight text-black leading-[1.1]">
+        Оформление заказа
+      </h2>
+    </div>
+
+    <div class="flex items-start gap-4 sm:gap-5 mb-7 sm:mb-8 p-3.5 sm:p-4 rounded-2xl bg-bg border border-line">
+      <div class="shrink-0 w-[100px] h-[100px] sm:w-[150px] sm:h-[150px] rounded-xl overflow-hidden bg-gray-100 border border-line">
+        {% if cover_image_id %}
+          <img src="/media/image/{{ cover_image_id }}"
+               alt="{{ title|e }}"
+               loading="lazy"
+               class="w-full h-full object-cover"
+               onerror="this.onerror=null;this.src='/static/images/no-image.png';">
+        {% else %}
+          <div class="w-full h-full flex items-center justify-center text-muted text-sm font-medium">
+            нет фото
+          </div>
+        {% endif %}
+      </div>
+      <div class="min-w-0 flex-1 pt-1 sm:pt-2">
+        <div class="text-base sm:text-lg font-bold tracking-tight text-black leading-snug line-clamp-3 break-words">
+          {{ title|e }}
+        </div>
+        <div class="mt-2 sm:mt-2.5 text-xs sm:text-[13px] text-muted font-mono tabular-nums">
+          {{ images|length }} фото
+        </div>
+      </div>
+    </div>
+
+    <p class="text-sm sm:text-[15px] text-black/70 leading-relaxed mb-5 sm:mb-6">
+      Выберите удобный способ связи с менеджером:
+    </p>
+
+    <div class="space-y-3.5 mb-6 sm:mb-7">
+      <a href="{{ telegram_order_url }}"
+         target="_blank" rel="noopener noreferrer"
+         class="group w-full inline-flex items-center gap-4 h-20 px-5 py-3.5 rounded-2xl bg-black text-white font-semibold hover:bg-zinc-800 transition-all active:scale-[0.98]">
+        <span class="shrink-0 w-11 h-11 rounded-xl bg-white/10 text-white inline-flex items-center justify-center group-hover:bg-white group-hover:text-[#229ED9] transition-colors">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M21.58 4.108l-2.92 13.72c-.22.99-.81 1.23-1.64.77l-4.53-3.34-2.19 2.1c-.24.24-.44.44-.9.44l.32-4.58 8.36-7.56c.36-.31-.08-.48-.56-.17L6.3 13.38l-4.43-1.38c-.96-.3-.98-.96.2-1.42l17.26-6.65c.8-.29 1.5.18 1.25 1.18z"/>
+          </svg>
+        </span>
+        <span class="text-[15px] sm:text-base tracking-tight flex-1 text-left">Написать в Telegram</span>
+        <span class="text-white/40 group-hover:text-white/60 transition-colors shrink-0" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+
+      {% set ig_href = instagram_direct_url if instagram_direct_url else (instagram_profile_url if instagram_profile_url else '#') %}
+      <a href="{{ ig_href }}"
+         {% if not instagram_direct_url and not instagram_profile_url %}
+           @click.prevent
+           aria-disabled="true"
+           class="group w-full inline-flex items-center gap-4 h-20 px-5 py-3.5 rounded-2xl bg-white text-black border border-line font-semibold hover:border-black/30 transition-all active:scale-[0.98] opacity-60 cursor-not-allowed"
+         {% else %}
+           target="_blank" rel="noopener noreferrer"
+           class="group w-full inline-flex items-center gap-4 h-20 px-5 py-3.5 rounded-2xl bg-white text-black border border-line font-semibold hover:border-black/30 transition-all active:scale-[0.98]"
+         {% endif %}
+      >
+        <span class="shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white inline-flex items-center justify-center">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
+            <circle cx="17.5" cy="6.5" r="1" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="text-[15px] sm:text-base tracking-tight flex-1 text-left">Написать в Instagram</span>
+        <span class="text-black/20 group-hover:text-black/50 transition-colors shrink-0" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </a>
+    </div>
+  </div>
+
+  <p class="text-xs sm:text-[13px] text-muted leading-relaxed pt-1">
+    Менеджер уточнит наличие вашего размера и рассчитает точные сроки доставки.
+  </p>
+</div>
+
 </div>
 {% endblock %}
 
@@ -101,7 +268,6 @@
 </script>
 
 <script type="module">
-  // 0. ЖЕЛЕЗНЫЙ ПЕРЕХВАТ КЛИКА (ПЕРВЫМ ДЕЛОМ — до любых импортов и инициализаций)
   const galleryContainer = document.getElementById('album-gallery');
   if (galleryContainer) {
     galleryContainer.addEventListener('click', (e) => {

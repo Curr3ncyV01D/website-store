@@ -113,7 +113,9 @@ def _router_get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 def _templates() -> Jinja2Templates:
-    return Jinja2Templates(directory=str(TEMPLATES_DIR))
+    tpl = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    tpl.env.globals["settings"] = settings
+    return tpl
 
 
 def ensure_dirs() -> None:
@@ -325,6 +327,28 @@ async def homepage(
     return tpl.TemplateResponse("index.html", context)
 
 
+@router.get("/about", response_class=HTMLResponse, tags=["pages"])
+async def about_page(request: Request):
+    tpl: Jinja2Templates = getattr(request.app.state, "templates", None) or _templates()
+    manager_username = str(getattr(settings, "MANAGER_USERNAME", "") or "").strip().lstrip("@")
+    instagram_username = str(getattr(settings, "INSTAGRAM_USERNAME", "") or "").strip().lstrip("@")
+    reviews_channel_url = str(getattr(settings, "REVIEWS_CHANNEL_URL", "") or "").strip()
+    context = {
+        "request": request,
+        "breadcrumbs": [
+            {"name": "Главная", "url": "/"},
+            {"name": "О проекте", "url": "/about"},
+        ],
+        "manager_username": manager_username,
+        "telegram_manager_url": f"https://t.me/{manager_username}" if manager_username else "",
+        "instagram_username": instagram_username,
+        "instagram_url": f"https://instagram.com/{instagram_username}" if instagram_username else "",
+        "instagram_direct_url": f"https://ig.me/m/{instagram_username}" if instagram_username else "",
+        "reviews_channel_url": reviews_channel_url,
+    }
+    return tpl.TemplateResponse("about.html", context)
+
+
 _INFINITE_SCROLL_PER_PAGE: int = 36
 
 
@@ -464,6 +488,7 @@ async def album_page(
 
     manager_username = str(getattr(settings, "MANAGER_USERNAME", "") or "").strip()
     manager_username_clean = manager_username.lstrip("@")
+    instagram_username = str(getattr(settings, "INSTAGRAM_USERNAME", "") or "").strip().lstrip("@")
 
     tpl_msg = str(getattr(settings, "TELEGRAM_ORDER_MESSAGE", "") or "").strip()
     if not tpl_msg:
@@ -482,6 +507,9 @@ async def album_page(
     except Exception:
         tg_url = f"https://t.me/{manager_username_clean}"
 
+    instagram_direct_url = f"https://ig.me/m/{instagram_username}" if instagram_username else ""
+    instagram_profile_url = f"https://instagram.com/{instagram_username}" if instagram_username else ""
+
     # breadcrumbs: keep Главная/Категория/Товар as expected; last one is plain text, not link
     breadcrumbs = list(detail.breadcrumbs or [])
     if not breadcrumbs or breadcrumbs[0].name != "Главная":
@@ -493,10 +521,15 @@ async def album_page(
         "album_id": detail.album_id,
         "title": detail.clean_title,
         "images": detail.images,
+        "cover_image_id": detail.cover_image_id,
         "breadcrumbs": breadcrumbs,
         "og_title": og_title,
         "og_image": og_image,
         "telegram_order_url": tg_url,
+        "manager_username": manager_username_clean,
+        "instagram_username": instagram_username,
+        "instagram_direct_url": instagram_direct_url,
+        "instagram_profile_url": instagram_profile_url,
     }
     logger.info(f"[web.router] /album/{detail.album_id} detail rendered ({len(detail.images or [])} images)")
     return tpl.TemplateResponse("album.html", context)

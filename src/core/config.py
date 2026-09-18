@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     MANAGER_USERNAME: str = "ManagerSem"
     TELEGRAM_ORDER_MESSAGE: str = 'Здравствуйте! Хочу заказать этот товар: "{title}". Ссылка: {url}'
 
+    INSTAGRAM_USERNAME: str = "semsneak"
+    REVIEWS_CHANNEL_URL: str = ""
+
     @field_validator("CRAWL_KEYWORDS", "RECOMMENDED_BRANDS", mode="before")
     @classmethod
     def _to_csv_list(cls, v: Any) -> Any:

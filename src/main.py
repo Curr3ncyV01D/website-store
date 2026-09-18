@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 
+from src.core.config import settings
 from src.modules.web.router import router as web_router
 from src.services.telegram_service import TelegramService
 
@@ -26,7 +27,9 @@ TEMPLATES_DIR: Path = Path(PROJECT_ROOT) / "templates"
 
 
 def _templates() -> Jinja2Templates:
-    return Jinja2Templates(directory=str(TEMPLATES_DIR))
+    tpl = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    tpl.env.globals["settings"] = settings
+    return tpl
 
 
 def ensure_dirs() -> None:

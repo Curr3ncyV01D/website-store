@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}О проекте — semsneak{% endblock %}
+
+{% block content %}
+<div class="max-w-[1000px] mx-auto">
+
+  <section class="mb-6 md:mb-10">
+    <nav class="flex items-center gap-1.5 md:gap-2 text-sm text-muted mb-6 md:mb-8" aria-label="Хлебные крошки">
+      {% for crumb in breadcrumbs %}
+        {% if not loop.last %}
+          <a href="{{ crumb.url }}" class="hover:text-black transition">{{ crumb.name|e }}</a>
+          <span aria-hidden="true" class="text-gray-300">/</span>
+        {% else %}
+          <span class="text-black font-semibold">{{ crumb.name|e }}</span>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    <div>
+      <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5 md:mb-2">О проекте</div>
+      <h1 class="font-sans font-extrabold text-2xl md:text-3xl sm:text-4xl md:text-5xl tracking-tight text-black leading-[1.1]">
+        semsneak — сервис доставки<br class="hidden sm:block">и агрегатор уличного стиля
+      </h1>
+    </div>
+  </section>
+
+  <section class="mb-10 md:mb-14">
+    <div class="bg-white border border-line rounded-xl md:rounded-2xl p-6 md:p-10">
+      <h2 class="font-sans font-extrabold text-xl md:text-2xl tracking-tight text-black mb-4 md:mb-5">Наш подход</h2>
+      <div class="space-y-3 md:space-y-4 text-[15px] md:text-[17px] leading-relaxed text-black/80">
+        <p>
+          Мы работаем напрямую с фабриками и аутлетами Азии и Европы — без цепочки посредников и лишних наценок.
+          Каждая позиция в каталоге — это реальные живые фотографии, без студийной ретуши и 3D-рендеров.
+        </p>
+        <p>
+          Подбор размера — наша приоритетная задача. Перед отправкой мы всегда сверяем сантиметры по стельке
+          и согласуем посадку, чтобы вещь села идеально. Никаких «примерно», только точные замеры.
+        </p>
+        <p>
+          Доставка — прозрачно и с трек-номером от двери до двери или до ближайшего ПВЗ.
+          Мы не прячем сроки и стоимость: всё фиксируется на этапе согласования.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-10 md:mb-14">
+    <div class="flex items-end justify-between mb-5 md:mb-7">
+      <div>
+        <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5 md:mb-2">Как это работает</div>
+        <h2 class="font-sans font-extrabold text-2xl md:text-3xl tracking-tight text-black leading-tight">Как проходит заказ на сайте</h2>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5">
+      <div class="bg-white border border-line rounded-xl md:rounded-2xl p-5 md:p-7 hover:shadow-card transition-all duration-300">
+        <div class="flex items-center justify-center w-11 h-11 rounded-xl bg-black text-white font-mono font-bold text-sm mb-4 md:mb-5">1</div>
+        <h3 class="font-sans font-bold text-lg md:text-xl tracking-tight text-black mb-2">Выбор модели</h3>
+        <p class="text-sm md:text-[15px] leading-relaxed text-black/70">
+          Листайте каталог, кликайте по карточкам — все фото настоящие, сняты вручную с подробных ракурсов.
+        </p>
+      </div>
+
+      <div class="bg-white border border-line rounded-xl md:rounded-2xl p-5 md:p-7 hover:shadow-card transition-all duration-300">
+        <div class="flex items-center justify-center w-11 h-11 rounded-xl bg-black text-white font-mono font-bold text-sm mb-4 md:mb-5">2</div>
+        <h3 class="font-sans font-bold text-lg md:text-xl tracking-tight text-black mb-2">Согласование</h3>
+        <p class="text-sm md:text-[15px] leading-relaxed text-black/70">
+          Напишите менеджеру — уточним размер по стельке в сантиметрах, проверим наличие и зафиксируем итоговую цену.
+        </p>
+      </div>
+
+      <div class="bg-white border border-line rounded-xl md:rounded-2xl p-5 md:p-7 hover:shadow-card transition-all duration-300">
+        <div class="flex items-center justify-center w-11 h-11 rounded-xl bg-black text-white font-mono font-bold text-sm mb-4 md:mb-5">3</div>
+        <h3 class="font-sans font-bold text-lg md:text-xl tracking-tight text-black mb-2">Доставка</h3>
+        <p class="text-sm md:text-[15px] leading-relaxed text-black/70">
+          Отправляем с персональным трек-номером. Вы отслеживаете путь посылки до двери или выбранного ПВЗ.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-10 md:mb-14">
+    <div class="bg-black text-white rounded-xl md:rounded-2xl p-6 md:p-10 overflow-hidden relative">
+      <div class="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/5 blur-2xl"></div>
+      <div class="relative">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-white/50 mb-1.5 md:mb-2">Доверие</div>
+        <h2 class="font-sans font-extrabold text-2xl md:text-3xl tracking-tight text-white leading-tight mb-4 md:mb-5">
+          Отзывы покупателей
+        </h2>
+        <p class="text-sm md:text-[15px] leading-relaxed text-white/70 mb-5 md:mb-7 max-w-2xl">
+          Реальные отзывы, фото распаковок и скриншоты подтверждения — всё в публичном канале.
+          Никаких фильтров и удалённых комментариев.
+        </p>
+        {% if reviews_channel_url %}
+          <a href="{{ reviews_channel_url }}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white text-black text-[12px] md:text-sm font-semibold tracking-wider uppercase hover:bg-white/90 transition-colors">
+            Перейти в канал с отзывами
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        {% else %}
+          <div class="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/10 text-white/60 text-[12px] md:text-sm font-semibold tracking-wider uppercase cursor-not-allowed">
+            Скоро публикация отзывов
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-8 md:mb-12">
+    <div class="flex items-end justify-between mb-5 md:mb-7">
+      <div>
+        <div class="text-[10px] uppercase tracking-[0.2em] text-muted mb-1.5 md:mb-2">Контакты</div>
+        <h2 class="font-sans font-extrabold text-2xl md:text-3xl tracking-tight text-black leading-tight">Каналы связи</h2>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
+      <a href="{{ telegram_manager_url }}" target="_blank" rel="noopener noreferrer"
+         class="group bg-white border border-line rounded-xl md:rounded-2xl p-5 md:p-6 hover:shadow-card hover:border-black/20 transition-all duration-300 flex items-start gap-4">
+        <div class="shrink-0 w-12 h-12 rounded-2xl bg-[#229ED9]/10 text-[#229ED9] inline-flex items-center justify-center group-hover:bg-[#229ED9] group-hover:text-white transition-colors">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M21.58 4.108l-2.92 13.72c-.22.99-.81 1.23-1.64.77l-4.53-3.34-2.19 2.1c-.24.24-.44.44-.9.44l.32-4.58 8.36-7.56c.36-.31-.08-.48-.56-.17L6.3 13.38l-4.43-1.38c-.96-.3-.98-.96.2-1.42l17.26-6.65c.8-.29 1.5.18 1.25 1.18z"/>
+          </svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">Менеджер</div>
+          <h3 class="font-sans font-bold text-lg tracking-tight text-black mb-1">Telegram</h3>
+          <p class="text-sm text-black/60 truncate">@{{ manager_username|e }}</p>
+        </div>
+      </a>
+
+      {% if reviews_channel_url %}
+      <a href="{{ reviews_channel_url }}" target="_blank" rel="noopener noreferrer"
+         class="group bg-white border border-line rounded-xl md:rounded-2xl p-5 md:p-6 hover:shadow-card hover:border-black/20 transition-all duration-300 flex items-start gap-4">
+        <div class="shrink-0 w-12 h-12 rounded-2xl bg-[#229ED9]/10 text-[#229ED9] inline-flex items-center justify-center group-hover:bg-[#229ED9] group-hover:text-white transition-colors">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M21.58 4.108l-2.92 13.72c-.22.99-.81 1.23-1.64.77l-4.53-3.34-2.19 2.1c-.24.24-.44.44-.9.44l.32-4.58 8.36-7.56c.36-.31-.08-.48-.56-.17L6.3 13.38l-4.43-1.38c-.96-.3-.98-.96.2-1.42l17.26-6.65c.8-.29 1.5.18 1.25 1.18z"/>
+          </svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">Сообщество</div>
+          <h3 class="font-sans font-bold text-lg tracking-tight text-black mb-1">Telegram-канал</h3>
+          <p class="text-sm text-black/60 truncate">Отзывы и новинки</p>
+        </div>
+      </a>
+      {% endif %}
+
+      {% if instagram_direct_url %}
+      <a href="{{ instagram_direct_url }}" target="_blank" rel="noopener noreferrer"
+         class="group bg-white border border-line rounded-xl md:rounded-2xl p-5 md:p-6 hover:shadow-card hover:border-black/20 transition-all duration-300 flex items-start gap-4">
+        <div class="shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white inline-flex items-center justify-center">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
+            <circle cx="17.5" cy="6.5" r="1" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">Direct</div>
+          <h3 class="font-sans font-bold text-lg tracking-tight text-black mb-1">Instagram</h3>
+          <p class="text-sm text-black/60 truncate">@{{ instagram_username|e }}</p>
+        </div>
+      </a>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+{% endblock %}
