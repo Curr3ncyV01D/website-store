@@ -11,8 +11,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-yupoo_db}
-    ports:
-      - "5433:5432"   # host:container — снаружи сервера доступен на 5433 (если нужно админом)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
