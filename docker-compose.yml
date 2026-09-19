@@ -11,6 +11,8 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-yupoo_db}
+    ports:
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -36,8 +38,8 @@ services:
     #   uvicorn src.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
     #   "
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
-    ports:
-      - "80:8000"
+    expose:
+      - "8000"
     env_file:
       # порядок важен: общие из .env, затем переопределения из .env.prod (если файл есть)
       # ВНИМАНИЕ: для запуска на сервере скопируй .env.prod в .env
@@ -76,6 +78,22 @@ services:
       web:
         condition: service_started
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: yupoo_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
 volumes:
   postgres_data:
     driver: local
+  caddy_data:
+  caddy_config:
