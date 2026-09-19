@@ -61,7 +61,6 @@ services:
   # =========================================
   worker:
     build: .
-    container_name: yupoo_worker
     restart: always
     tty: true
     command: python scripts/run_worker.py --interval 1.5
